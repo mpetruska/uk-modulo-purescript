@@ -1,0 +1,26 @@
+{
+  "name": "uk-modulo-purescript",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "output"
+  ],
+  "dependencies": {
+    "purescript-either": "^1.0.0",
+    "purescript-maybe": "^1.0.0",
+    "purescript-parsing": "^1.0.0",
+    "purescript-integers": "^1.1.0",
+    "purescript-bifunctors": "^1.0.0",
+    "purescript-lists": "^1.0.1",
+    "purescript-math": "^2.0.0",
+    "purescript-lazy": "^1.0.1",
+    "purescript-maps": "^1.2.0",
+    "purescript-tuples": "^1.0.0"
+  },
+  "devDependencies": {
+    "purescript-console": "^1.0.0",
+    "purescript-psci-support": "^1.0.0",
+    "purescript-test-unit": "^9.1.0"
+  }
+}
