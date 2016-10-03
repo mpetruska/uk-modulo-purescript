@@ -1,0 +1,18 @@
+{
+  "name": "uk-modulo-purescript",
+  "version": "1.0.0",
+  "description": "A PureScript implementation of the VocaLink UK Bank account number modulus checking version 3.90.",
+  "license": "MIT",
+  "repository": "https://github.com/mpetruska/uk-modulo-purescript",
+  "bugs": {
+    "url": "https://github.com/mpetruska/uk-modulo-purescript/issues"
+  },
+  "devDependencies": {
+    "bower": "^1.7.9",
+    "pulp": "^9.0.1"
+  },
+  "scripts": {
+    "build": "pulp build",
+    "test": "pulp test"
+  }
+}
