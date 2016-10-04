@@ -1,5 +1,5 @@
 {
-  "name": "uk-modulo-purescript",
+  "name": "purescript-uk-modulo",
   "ignore": [
     "**/.*",
     "node_modules",
