@@ -21,7 +21,77 @@ License: [MIT](LICENSE)
 Getting started
 ---------------
 
-...
+    bower install --save purescript-uk-modulo
+
+Setting up gulp build for JavaScript projects:
+
+    bower install --save gulp-purescript
+
+```JavaScript
+"use strict";
+
+var gulp = require("gulp"),
+    purescript = require("gulp-purescript");
+
+// purescript sources
+var sources = [
+  "src/**/*.purs",
+  "bower_components/purescript-*/src/**/*.purs",
+];
+
+// javascript sources
+var foreigns = [
+  "src/**/*.js",
+  "bower_components/purescript-*/src/**/*.js"
+];
+
+// Build the purescript sources and put resultant javascript files into output/.
+gulp.task("make", function() {
+  return purescript.psc({
+    src: sources,
+    ffi: foreigns
+  });
+});
+
+gulp.task("default", ["make"]);
+```
+
+Usage
+-----
+
+PureScript:
+
+```PureScript
+import Data.Either (Either(..))
+import ModulusCheck (check)
+
+-- valid account number
+check "089999" "66374958" === Right true
+
+-- invalid account number
+check "089999" "66374959" === Right false
+
+-- invalid format
+check "089999" "xxxx" === Left "Account number format is not valid"
+
+```
+
+JavaScript:
+
+```JavaScript
+// valid account number
+PS.ModulusCheck.JavaScript.check("089999", "66374958").isValid === true;
+
+// invalid account number
+var result = PS.ModulusCheck.JavaScript.check("089999", "66374959");
+result.isValid === false;
+result.isError === false;
+
+// invalid format
+var result = PS.ModulusCheck.JavaScript.check("089999", "xxxx");
+result.isError === true;
+result.error === "Account number format is not valid";
+```
 
 Issues
 ------

@@ -6,6 +6,14 @@
     "bower_components",
     "output"
   ],
+  "license": "MIT",
+  "authors": [
+    "Mark Petruska"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/mpetruska/uk-modulo-purescript.git"
+  },
   "dependencies": {
     "purescript-either": "^1.0.0",
     "purescript-maybe": "^1.0.0",
