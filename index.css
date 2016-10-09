@@ -1,0 +1,15 @@
+#validation-inline {
+  margin-left: 1em;
+}
+
+.error {
+  color: #CC0000;
+}
+
+.invalid {
+  color: #CC0000;
+}
+
+.valid {
+  color: #00CC00;
+}

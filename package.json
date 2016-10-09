@@ -1,4 +1,5 @@
 {
+  "private": true,
   "name": "purescript-uk-modulo-demo-page",
   "version": "1.0.0",
   "description": "A demo page for purescript-uk-modulo.",
@@ -6,12 +7,15 @@
   "bugs": {
     "url": "https://github.com/mpetruska/uk-modulo-purescript/issues"
   },
+  "dependencies": {
+    "virtual-dom": "^2.1.1"
+  },
   "devDependencies": {
     "bower": "^1.7.9",
     "pulp": "^9.0.1"
   },
   "scripts": {
-    "build": "pulp build",
+    "build": "pulp browserify --optimise --to dist/index.js",
     "test": "pulp test"
   }
 }

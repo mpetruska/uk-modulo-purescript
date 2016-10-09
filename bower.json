@@ -1,5 +1,6 @@
 {
-  "name": "uk-modulo-purescript",
+  "private": true,
+  "name": "purescript-uk-modulo-demo-page",
   "ignore": [
     "**/.*",
     "node_modules",
@@ -7,7 +8,9 @@
     "output"
   ],
   "dependencies": {
-    "purescript-console": "^1.0.0"
+    "purescript-console": "^1.0.0",
+    "purescript-halogen": "^0.11.0",
+    "purescript-uk-modulo": "^1.0.0"
   },
   "devDependencies": {
     "purescript-psci-support": "^1.0.0"
