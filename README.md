@@ -18,6 +18,8 @@ unfortunately there can be errors that are undetected.
 
 License: [MIT](LICENSE)
 
+[Demo page](https://mpetruska.github.io/uk-modulo-purescript/)
+
 Getting started
 ---------------
 
