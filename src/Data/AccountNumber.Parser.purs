@@ -11,7 +11,6 @@ module ModulusCheck.Data.AccountNumber.Parser
        ) where
 
 import Prelude
-import Control.Apply ((<*))
 import Data.Either (Either)
 import Data.List (List(..), concat, take, (:))
 import Text.Parsing.Parser (Parser)

@@ -13,7 +13,7 @@ import Prelude
 import Data.Either (Either(..))
 import Data.List (List(..), concat, drop, length, take, (:), (!!))
 import Data.Maybe (Maybe(..))
-import Data.String (indexOf, singleton)
+import Data.String (Pattern(..), indexOf, singleton)
 
 import ModulusCheckTypes (Error)
 
@@ -38,7 +38,7 @@ showAccountNumber x =    "{ sortCodeString: " <> show x.sortCodeString
 
 getDigit :: Char -> Digits -> Either Error Int
 getDigit code digits = toEither do
-    i <- indexOf (singleton code) digitCodes
+    i <- indexOf (Pattern (singleton code)) digitCodes
     digits !! i
   where
     digitCodes = "uvwxyzabcdefgh"
