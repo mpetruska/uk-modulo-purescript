@@ -99,3 +99,9 @@ Issues
 ------
 
 Please report issues and feature requests [here](https://github.com/mpetruska/uk-modulo-purescript/issues).
+
+Version history
+---------------
+
+* 1.0.1 - build updated, PureScript version 0.10.3
+* 1.0.0 - initial release, spec version 3.90
