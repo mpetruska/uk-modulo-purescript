@@ -3,7 +3,6 @@ module ModulusCheck.JavaScript
        , check
        ) where
 
-import Prelude ((>>>))
 import Data.Either (either)
 import Data.Function.Uncurried (Fn2, mkFn2)
 

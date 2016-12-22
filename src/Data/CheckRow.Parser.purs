@@ -4,7 +4,6 @@ module ModulusCheck.Data.CheckRow.Parser
 
 import Prelude
 import Control.Alt ((<|>))
-import Control.Apply ((*>))
 import Data.List (List)
 import Text.Parsing.Parser (Parser)
 import Text.Parsing.Parser.Combinators (optionMaybe, sepEndBy1)

@@ -3,7 +3,6 @@ module ModulusCheck.Data.SubstitutionRow.Parser
        ) where
 
 import Prelude
-import Control.Apply ((*>))
 import Data.Map (Map, fromFoldable)
 import Data.Tuple (Tuple(..))
 import Text.Parsing.Parser (Parser)

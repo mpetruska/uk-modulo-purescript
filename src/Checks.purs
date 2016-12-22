@@ -74,9 +74,9 @@ exception3Check standardCheckRow dblAlCheckWeights accountNumber =
              performException3Check c dblAlCheckWeights accountNumber
   where
     performException3Check :: Int -> Weights -> AccountNumber -> Boolean
-    performException3Check 6 _       _             = true
-    performException3Check 9 _       _             = true
-    performException3Check _ weights accountNumber = doubleAlternateCheck weights accountNumber.digits
+    performException3Check 6 _       _   = true
+    performException3Check 9 _       _   = true
+    performException3Check _ weights acc = doubleAlternateCheck weights acc.digits
 
 -- Exception4
 exception4Check :: Weights -> AccountNumber -> CheckResult

@@ -19,7 +19,7 @@ import Data.Foldable (foldl)
 import Data.Int (fromString)
 import Data.Maybe (Maybe(..))
 import Data.String (singleton)
-import Text.Parsing.Parser (Parser, ParseError(..), fail, runParser)
+import Text.Parsing.Parser (Parser, ParseError, fail, runParser, parseErrorMessage, parseErrorPosition)
 import Text.Parsing.Parser.Pos (Position(..))
 import Text.Parsing.Parser.String (satisfy, string)
 import Text.Parsing.Parser.Token (digit)
@@ -49,9 +49,9 @@ exactly n p = loop n initial
     initial :: Parser String (List a)
     initial = (flip Cons) Nil <$> p
     loop :: Int -> Parser String (List a) -> Parser String (List a)
-    loop n a
-      | n == 1     = a
-      | n > 1      = loop (n - 1) $ Cons <$> p <*> a
+    loop j a
+      | j == 1     = a
+      | j > 1      = loop (j - 1) $ Cons <$> p <*> a
       | otherwise  = fail "negative or zero n in exactly"
 
 stringDigitsParser :: Int -> Parser String String
@@ -72,8 +72,13 @@ signedIntegerParser =
   <|> integerParser
 
 parseErrorToError :: ParseError -> Error
-parseErrorToError (ParseError { message, position: Position { line, column } }) =
-  message <> ", line: " <> show line <> ", column: " <> show column
+parseErrorToError error =
+    message <> ", line: " <> show (line position) <> ", column: " <> show (column position)
+  where
+    message = parseErrorMessage error
+    position = parseErrorPosition error
+    line (Position p) = p.line
+    column (Position p) = p.column
 
 parse :: forall a. String -> Parser String a -> Either Error a
 parse input p = lmap parseErrorToError $ runParser input p

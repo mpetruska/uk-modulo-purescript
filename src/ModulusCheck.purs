@@ -63,9 +63,9 @@ check sortCode accountNumber =
     
     performCheckWithParser :: AccountNumberParser -> CheckResult
     performCheckWithParser accountNumberParser = do
-      accountNumber <- parseAccountNumber sortCode accountNumber accountNumberParser
-      checkRows <- getCheckRows accountNumber.sortCodeString
-      performCheck checkRows accountNumber
+      acc <- parseAccountNumber sortCode accountNumber accountNumberParser
+      checkRows <- getCheckRows acc.sortCodeString
+      performCheck checkRows acc
 
 -- No rows in check table => no modulus check can be performed, must assume account number is valid
 performCheck :: List CheckRow -> AccountNumber -> CheckResult
