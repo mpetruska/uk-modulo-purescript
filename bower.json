@@ -8,11 +8,11 @@
     "output"
   ],
   "dependencies": {
-    "purescript-console": "^1.0.0",
-    "purescript-halogen": "^0.11.0",
-    "purescript-uk-modulo": "^1.0.0"
+    "purescript-console": "^2.0.0",
+    "purescript-halogen": "^0.12.0",
+    "purescript-uk-modulo": "^1.1.0"
   },
   "devDependencies": {
-    "purescript-psci-support": "^1.0.0"
+    "purescript-psci-support": "^2.0.0"
   }
 }
