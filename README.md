@@ -4,19 +4,21 @@ UK modulo - PureScript
 ======================
 
 This is an implementation of the [VocaLink UK Bank account number
-modulus checking][VocaLink link] version 3.90, written in PureScript.
+modulus checking][VocaLink link] 4.00 (and previous version), written in PureScript.
 
 [VocaLink link]: https://www.vocalink.com/customer-support/modulus-checking/
 
 Modulus checking is a procedure used to determine whether a bank account number
 can be valid. If the account number check is negative then the account cannot
-exist, be the opposite is not true (meaning that if the check succeeds that does
+exist, but the opposite is not true (meaning that if the check succeeds that does
 not guarantee the existence of the account).
 
-Based on this modulus checking can be used to help detect some input errors, but
-unfortunately there can be errors that are undetected.
+Modulus checking can be used to help detect some input errors, but
+unfortunately there can be user errors that remain undetected.
 
 License: [MIT](LICENSE)
+
+[Demo page](https://mpetruska.github.io/uk-modulo-purescript/)
 
 Getting started
 ---------------
@@ -97,3 +99,11 @@ Issues
 ------
 
 Please report issues and feature requests [here](https://github.com/mpetruska/uk-modulo-purescript/issues).
+
+Version history
+---------------
+
+* 1.1.0 - updates implementation according to [version 4.00 of the spec](https://www.vocalink.com/media/2101/vocalink-validating-account-numbers-v400.pdf)
+  (effective from 2017/01/09)
+* 1.0.1 - build updated, PureScript version 0.10.3
+* 1.0.0 - initial release, spec version 3.90
