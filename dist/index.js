@@ -1,1248 +1,5 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-
-},{}],2:[function(require,module,exports){
-(function (global){
-var topLevel = typeof global !== 'undefined' ? global :
-    typeof window !== 'undefined' ? window : {}
-var minDoc = require('min-document');
-
-if (typeof document !== 'undefined') {
-    module.exports = document;
-} else {
-    var doccy = topLevel['__GLOBAL_DOCUMENT_CACHE@4'];
-
-    if (!doccy) {
-        doccy = topLevel['__GLOBAL_DOCUMENT_CACHE@4'] = minDoc;
-    }
-
-    module.exports = doccy;
-}
-
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"min-document":1}],3:[function(require,module,exports){
-"use strict";
-
-module.exports = function isObject(x) {
-	return typeof x === "object" && x !== null;
-};
-
-},{}],4:[function(require,module,exports){
-var createElement = require("./vdom/create-element.js")
-
-module.exports = createElement
-
-},{"./vdom/create-element.js":8}],5:[function(require,module,exports){
-var diff = require("./vtree/diff.js")
-
-module.exports = diff
-
-},{"./vtree/diff.js":25}],6:[function(require,module,exports){
-var patch = require("./vdom/patch.js")
-
-module.exports = patch
-
-},{"./vdom/patch.js":11}],7:[function(require,module,exports){
-var isObject = require("is-object")
-var isHook = require("../vnode/is-vhook.js")
-
-module.exports = applyProperties
-
-function applyProperties(node, props, previous) {
-    for (var propName in props) {
-        var propValue = props[propName]
-
-        if (propValue === undefined) {
-            removeProperty(node, propName, propValue, previous);
-        } else if (isHook(propValue)) {
-            removeProperty(node, propName, propValue, previous)
-            if (propValue.hook) {
-                propValue.hook(node,
-                    propName,
-                    previous ? previous[propName] : undefined)
-            }
-        } else {
-            if (isObject(propValue)) {
-                patchObject(node, props, previous, propName, propValue);
-            } else {
-                node[propName] = propValue
-            }
-        }
-    }
-}
-
-function removeProperty(node, propName, propValue, previous) {
-    if (previous) {
-        var previousValue = previous[propName]
-
-        if (!isHook(previousValue)) {
-            if (propName === "attributes") {
-                for (var attrName in previousValue) {
-                    node.removeAttribute(attrName)
-                }
-            } else if (propName === "style") {
-                for (var i in previousValue) {
-                    node.style[i] = ""
-                }
-            } else if (typeof previousValue === "string") {
-                node[propName] = ""
-            } else {
-                node[propName] = null
-            }
-        } else if (previousValue.unhook) {
-            previousValue.unhook(node, propName, propValue)
-        }
-    }
-}
-
-function patchObject(node, props, previous, propName, propValue) {
-    var previousValue = previous ? previous[propName] : undefined
-
-    // Set attributes
-    if (propName === "attributes") {
-        for (var attrName in propValue) {
-            var attrValue = propValue[attrName]
-
-            if (attrValue === undefined) {
-                node.removeAttribute(attrName)
-            } else {
-                node.setAttribute(attrName, attrValue)
-            }
-        }
-
-        return
-    }
-
-    if(previousValue && isObject(previousValue) &&
-        getPrototype(previousValue) !== getPrototype(propValue)) {
-        node[propName] = propValue
-        return
-    }
-
-    if (!isObject(node[propName])) {
-        node[propName] = {}
-    }
-
-    var replacer = propName === "style" ? "" : undefined
-
-    for (var k in propValue) {
-        var value = propValue[k]
-        node[propName][k] = (value === undefined) ? replacer : value
-    }
-}
-
-function getPrototype(value) {
-    if (Object.getPrototypeOf) {
-        return Object.getPrototypeOf(value)
-    } else if (value.__proto__) {
-        return value.__proto__
-    } else if (value.constructor) {
-        return value.constructor.prototype
-    }
-}
-
-},{"../vnode/is-vhook.js":16,"is-object":3}],8:[function(require,module,exports){
-var document = require("global/document")
-
-var applyProperties = require("./apply-properties")
-
-var isVNode = require("../vnode/is-vnode.js")
-var isVText = require("../vnode/is-vtext.js")
-var isWidget = require("../vnode/is-widget.js")
-var handleThunk = require("../vnode/handle-thunk.js")
-
-module.exports = createElement
-
-function createElement(vnode, opts) {
-    var doc = opts ? opts.document || document : document
-    var warn = opts ? opts.warn : null
-
-    vnode = handleThunk(vnode).a
-
-    if (isWidget(vnode)) {
-        return vnode.init()
-    } else if (isVText(vnode)) {
-        return doc.createTextNode(vnode.text)
-    } else if (!isVNode(vnode)) {
-        if (warn) {
-            warn("Item is not a valid virtual dom node", vnode)
-        }
-        return null
-    }
-
-    var node = (vnode.namespace === null) ?
-        doc.createElement(vnode.tagName) :
-        doc.createElementNS(vnode.namespace, vnode.tagName)
-
-    var props = vnode.properties
-    applyProperties(node, props)
-
-    var children = vnode.children
-
-    for (var i = 0; i < children.length; i++) {
-        var childNode = createElement(children[i], opts)
-        if (childNode) {
-            node.appendChild(childNode)
-        }
-    }
-
-    return node
-}
-
-},{"../vnode/handle-thunk.js":14,"../vnode/is-vnode.js":17,"../vnode/is-vtext.js":18,"../vnode/is-widget.js":19,"./apply-properties":7,"global/document":2}],9:[function(require,module,exports){
-// Maps a virtual DOM tree onto a real DOM tree in an efficient manner.
-// We don't want to read all of the DOM nodes in the tree so we use
-// the in-order tree indexing to eliminate recursion down certain branches.
-// We only recurse into a DOM node if we know that it contains a child of
-// interest.
-
-var noChild = {}
-
-module.exports = domIndex
-
-function domIndex(rootNode, tree, indices, nodes) {
-    if (!indices || indices.length === 0) {
-        return {}
-    } else {
-        indices.sort(ascending)
-        return recurse(rootNode, tree, indices, nodes, 0)
-    }
-}
-
-function recurse(rootNode, tree, indices, nodes, rootIndex) {
-    nodes = nodes || {}
-
-
-    if (rootNode) {
-        if (indexInRange(indices, rootIndex, rootIndex)) {
-            nodes[rootIndex] = rootNode
-        }
-
-        var vChildren = tree.children
-
-        if (vChildren) {
-
-            var childNodes = rootNode.childNodes
-
-            for (var i = 0; i < tree.children.length; i++) {
-                rootIndex += 1
-
-                var vChild = vChildren[i] || noChild
-                var nextIndex = rootIndex + (vChild.count || 0)
-
-                // skip recursion down the tree if there are no nodes down here
-                if (indexInRange(indices, rootIndex, nextIndex)) {
-                    recurse(childNodes[i], vChild, indices, nodes, rootIndex)
-                }
-
-                rootIndex = nextIndex
-            }
-        }
-    }
-
-    return nodes
-}
-
-// Binary search for an index in the interval [left, right]
-function indexInRange(indices, left, right) {
-    if (indices.length === 0) {
-        return false
-    }
-
-    var minIndex = 0
-    var maxIndex = indices.length - 1
-    var currentIndex
-    var currentItem
-
-    while (minIndex <= maxIndex) {
-        currentIndex = ((maxIndex + minIndex) / 2) >> 0
-        currentItem = indices[currentIndex]
-
-        if (minIndex === maxIndex) {
-            return currentItem >= left && currentItem <= right
-        } else if (currentItem < left) {
-            minIndex = currentIndex + 1
-        } else  if (currentItem > right) {
-            maxIndex = currentIndex - 1
-        } else {
-            return true
-        }
-    }
-
-    return false;
-}
-
-function ascending(a, b) {
-    return a > b ? 1 : -1
-}
-
-},{}],10:[function(require,module,exports){
-var applyProperties = require("./apply-properties")
-
-var isWidget = require("../vnode/is-widget.js")
-var VPatch = require("../vnode/vpatch.js")
-
-var updateWidget = require("./update-widget")
-
-module.exports = applyPatch
-
-function applyPatch(vpatch, domNode, renderOptions) {
-    var type = vpatch.type
-    var vNode = vpatch.vNode
-    var patch = vpatch.patch
-
-    switch (type) {
-        case VPatch.REMOVE:
-            return removeNode(domNode, vNode)
-        case VPatch.INSERT:
-            return insertNode(domNode, patch, renderOptions)
-        case VPatch.VTEXT:
-            return stringPatch(domNode, vNode, patch, renderOptions)
-        case VPatch.WIDGET:
-            return widgetPatch(domNode, vNode, patch, renderOptions)
-        case VPatch.VNODE:
-            return vNodePatch(domNode, vNode, patch, renderOptions)
-        case VPatch.ORDER:
-            reorderChildren(domNode, patch)
-            return domNode
-        case VPatch.PROPS:
-            applyProperties(domNode, patch, vNode.properties)
-            return domNode
-        case VPatch.THUNK:
-            return replaceRoot(domNode,
-                renderOptions.patch(domNode, patch, renderOptions))
-        default:
-            return domNode
-    }
-}
-
-function removeNode(domNode, vNode) {
-    var parentNode = domNode.parentNode
-
-    if (parentNode) {
-        parentNode.removeChild(domNode)
-    }
-
-    destroyWidget(domNode, vNode);
-
-    return null
-}
-
-function insertNode(parentNode, vNode, renderOptions) {
-    var newNode = renderOptions.render(vNode, renderOptions)
-
-    if (parentNode) {
-        parentNode.appendChild(newNode)
-    }
-
-    return parentNode
-}
-
-function stringPatch(domNode, leftVNode, vText, renderOptions) {
-    var newNode
-
-    if (domNode.nodeType === 3) {
-        domNode.replaceData(0, domNode.length, vText.text)
-        newNode = domNode
-    } else {
-        var parentNode = domNode.parentNode
-        newNode = renderOptions.render(vText, renderOptions)
-
-        if (parentNode && newNode !== domNode) {
-            parentNode.replaceChild(newNode, domNode)
-        }
-    }
-
-    return newNode
-}
-
-function widgetPatch(domNode, leftVNode, widget, renderOptions) {
-    var updating = updateWidget(leftVNode, widget)
-    var newNode
-
-    if (updating) {
-        newNode = widget.update(leftVNode, domNode) || domNode
-    } else {
-        newNode = renderOptions.render(widget, renderOptions)
-    }
-
-    var parentNode = domNode.parentNode
-
-    if (parentNode && newNode !== domNode) {
-        parentNode.replaceChild(newNode, domNode)
-    }
-
-    if (!updating) {
-        destroyWidget(domNode, leftVNode)
-    }
-
-    return newNode
-}
-
-function vNodePatch(domNode, leftVNode, vNode, renderOptions) {
-    var parentNode = domNode.parentNode
-    var newNode = renderOptions.render(vNode, renderOptions)
-
-    if (parentNode && newNode !== domNode) {
-        parentNode.replaceChild(newNode, domNode)
-    }
-
-    return newNode
-}
-
-function destroyWidget(domNode, w) {
-    if (typeof w.destroy === "function" && isWidget(w)) {
-        w.destroy(domNode)
-    }
-}
-
-function reorderChildren(domNode, moves) {
-    var childNodes = domNode.childNodes
-    var keyMap = {}
-    var node
-    var remove
-    var insert
-
-    for (var i = 0; i < moves.removes.length; i++) {
-        remove = moves.removes[i]
-        node = childNodes[remove.from]
-        if (remove.key) {
-            keyMap[remove.key] = node
-        }
-        domNode.removeChild(node)
-    }
-
-    var length = childNodes.length
-    for (var j = 0; j < moves.inserts.length; j++) {
-        insert = moves.inserts[j]
-        node = keyMap[insert.key]
-        // this is the weirdest bug i've ever seen in webkit
-        domNode.insertBefore(node, insert.to >= length++ ? null : childNodes[insert.to])
-    }
-}
-
-function replaceRoot(oldRoot, newRoot) {
-    if (oldRoot && newRoot && oldRoot !== newRoot && oldRoot.parentNode) {
-        oldRoot.parentNode.replaceChild(newRoot, oldRoot)
-    }
-
-    return newRoot;
-}
-
-},{"../vnode/is-widget.js":19,"../vnode/vpatch.js":22,"./apply-properties":7,"./update-widget":12}],11:[function(require,module,exports){
-var document = require("global/document")
-var isArray = require("x-is-array")
-
-var render = require("./create-element")
-var domIndex = require("./dom-index")
-var patchOp = require("./patch-op")
-module.exports = patch
-
-function patch(rootNode, patches, renderOptions) {
-    renderOptions = renderOptions || {}
-    renderOptions.patch = renderOptions.patch && renderOptions.patch !== patch
-        ? renderOptions.patch
-        : patchRecursive
-    renderOptions.render = renderOptions.render || render
-
-    return renderOptions.patch(rootNode, patches, renderOptions)
-}
-
-function patchRecursive(rootNode, patches, renderOptions) {
-    var indices = patchIndices(patches)
-
-    if (indices.length === 0) {
-        return rootNode
-    }
-
-    var index = domIndex(rootNode, patches.a, indices)
-    var ownerDocument = rootNode.ownerDocument
-
-    if (!renderOptions.document && ownerDocument !== document) {
-        renderOptions.document = ownerDocument
-    }
-
-    for (var i = 0; i < indices.length; i++) {
-        var nodeIndex = indices[i]
-        rootNode = applyPatch(rootNode,
-            index[nodeIndex],
-            patches[nodeIndex],
-            renderOptions)
-    }
-
-    return rootNode
-}
-
-function applyPatch(rootNode, domNode, patchList, renderOptions) {
-    if (!domNode) {
-        return rootNode
-    }
-
-    var newNode
-
-    if (isArray(patchList)) {
-        for (var i = 0; i < patchList.length; i++) {
-            newNode = patchOp(patchList[i], domNode, renderOptions)
-
-            if (domNode === rootNode) {
-                rootNode = newNode
-            }
-        }
-    } else {
-        newNode = patchOp(patchList, domNode, renderOptions)
-
-        if (domNode === rootNode) {
-            rootNode = newNode
-        }
-    }
-
-    return rootNode
-}
-
-function patchIndices(patches) {
-    var indices = []
-
-    for (var key in patches) {
-        if (key !== "a") {
-            indices.push(Number(key))
-        }
-    }
-
-    return indices
-}
-
-},{"./create-element":8,"./dom-index":9,"./patch-op":10,"global/document":2,"x-is-array":26}],12:[function(require,module,exports){
-var isWidget = require("../vnode/is-widget.js")
-
-module.exports = updateWidget
-
-function updateWidget(a, b) {
-    if (isWidget(a) && isWidget(b)) {
-        if ("name" in a && "name" in b) {
-            return a.id === b.id
-        } else {
-            return a.init === b.init
-        }
-    }
-
-    return false
-}
-
-},{"../vnode/is-widget.js":19}],13:[function(require,module,exports){
-'use strict';
-
-module.exports = SoftSetHook;
-
-function SoftSetHook(value) {
-    if (!(this instanceof SoftSetHook)) {
-        return new SoftSetHook(value);
-    }
-
-    this.value = value;
-}
-
-SoftSetHook.prototype.hook = function (node, propertyName) {
-    if (node[propertyName] !== this.value) {
-        node[propertyName] = this.value;
-    }
-};
-
-},{}],14:[function(require,module,exports){
-var isVNode = require("./is-vnode")
-var isVText = require("./is-vtext")
-var isWidget = require("./is-widget")
-var isThunk = require("./is-thunk")
-
-module.exports = handleThunk
-
-function handleThunk(a, b) {
-    var renderedA = a
-    var renderedB = b
-
-    if (isThunk(b)) {
-        renderedB = renderThunk(b, a)
-    }
-
-    if (isThunk(a)) {
-        renderedA = renderThunk(a, null)
-    }
-
-    return {
-        a: renderedA,
-        b: renderedB
-    }
-}
-
-function renderThunk(thunk, previous) {
-    var renderedThunk = thunk.vnode
-
-    if (!renderedThunk) {
-        renderedThunk = thunk.vnode = thunk.render(previous)
-    }
-
-    if (!(isVNode(renderedThunk) ||
-            isVText(renderedThunk) ||
-            isWidget(renderedThunk))) {
-        throw new Error("thunk did not return a valid node");
-    }
-
-    return renderedThunk
-}
-
-},{"./is-thunk":15,"./is-vnode":17,"./is-vtext":18,"./is-widget":19}],15:[function(require,module,exports){
-module.exports = isThunk
-
-function isThunk(t) {
-    return t && t.type === "Thunk"
-}
-
-},{}],16:[function(require,module,exports){
-module.exports = isHook
-
-function isHook(hook) {
-    return hook &&
-      (typeof hook.hook === "function" && !hook.hasOwnProperty("hook") ||
-       typeof hook.unhook === "function" && !hook.hasOwnProperty("unhook"))
-}
-
-},{}],17:[function(require,module,exports){
-var version = require("./version")
-
-module.exports = isVirtualNode
-
-function isVirtualNode(x) {
-    return x && x.type === "VirtualNode" && x.version === version
-}
-
-},{"./version":20}],18:[function(require,module,exports){
-var version = require("./version")
-
-module.exports = isVirtualText
-
-function isVirtualText(x) {
-    return x && x.type === "VirtualText" && x.version === version
-}
-
-},{"./version":20}],19:[function(require,module,exports){
-module.exports = isWidget
-
-function isWidget(w) {
-    return w && w.type === "Widget"
-}
-
-},{}],20:[function(require,module,exports){
-module.exports = "2"
-
-},{}],21:[function(require,module,exports){
-var version = require("./version")
-var isVNode = require("./is-vnode")
-var isWidget = require("./is-widget")
-var isThunk = require("./is-thunk")
-var isVHook = require("./is-vhook")
-
-module.exports = VirtualNode
-
-var noProperties = {}
-var noChildren = []
-
-function VirtualNode(tagName, properties, children, key, namespace) {
-    this.tagName = tagName
-    this.properties = properties || noProperties
-    this.children = children || noChildren
-    this.key = key != null ? String(key) : undefined
-    this.namespace = (typeof namespace === "string") ? namespace : null
-
-    var count = (children && children.length) || 0
-    var descendants = 0
-    var hasWidgets = false
-    var hasThunks = false
-    var descendantHooks = false
-    var hooks
-
-    for (var propName in properties) {
-        if (properties.hasOwnProperty(propName)) {
-            var property = properties[propName]
-            if (isVHook(property) && property.unhook) {
-                if (!hooks) {
-                    hooks = {}
-                }
-
-                hooks[propName] = property
-            }
-        }
-    }
-
-    for (var i = 0; i < count; i++) {
-        var child = children[i]
-        if (isVNode(child)) {
-            descendants += child.count || 0
-
-            if (!hasWidgets && child.hasWidgets) {
-                hasWidgets = true
-            }
-
-            if (!hasThunks && child.hasThunks) {
-                hasThunks = true
-            }
-
-            if (!descendantHooks && (child.hooks || child.descendantHooks)) {
-                descendantHooks = true
-            }
-        } else if (!hasWidgets && isWidget(child)) {
-            if (typeof child.destroy === "function") {
-                hasWidgets = true
-            }
-        } else if (!hasThunks && isThunk(child)) {
-            hasThunks = true;
-        }
-    }
-
-    this.count = count + descendants
-    this.hasWidgets = hasWidgets
-    this.hasThunks = hasThunks
-    this.hooks = hooks
-    this.descendantHooks = descendantHooks
-}
-
-VirtualNode.prototype.version = version
-VirtualNode.prototype.type = "VirtualNode"
-
-},{"./is-thunk":15,"./is-vhook":16,"./is-vnode":17,"./is-widget":19,"./version":20}],22:[function(require,module,exports){
-var version = require("./version")
-
-VirtualPatch.NONE = 0
-VirtualPatch.VTEXT = 1
-VirtualPatch.VNODE = 2
-VirtualPatch.WIDGET = 3
-VirtualPatch.PROPS = 4
-VirtualPatch.ORDER = 5
-VirtualPatch.INSERT = 6
-VirtualPatch.REMOVE = 7
-VirtualPatch.THUNK = 8
-
-module.exports = VirtualPatch
-
-function VirtualPatch(type, vNode, patch) {
-    this.type = Number(type)
-    this.vNode = vNode
-    this.patch = patch
-}
-
-VirtualPatch.prototype.version = version
-VirtualPatch.prototype.type = "VirtualPatch"
-
-},{"./version":20}],23:[function(require,module,exports){
-var version = require("./version")
-
-module.exports = VirtualText
-
-function VirtualText(text) {
-    this.text = String(text)
-}
-
-VirtualText.prototype.version = version
-VirtualText.prototype.type = "VirtualText"
-
-},{"./version":20}],24:[function(require,module,exports){
-var isObject = require("is-object")
-var isHook = require("../vnode/is-vhook")
-
-module.exports = diffProps
-
-function diffProps(a, b) {
-    var diff
-
-    for (var aKey in a) {
-        if (!(aKey in b)) {
-            diff = diff || {}
-            diff[aKey] = undefined
-        }
-
-        var aValue = a[aKey]
-        var bValue = b[aKey]
-
-        if (aValue === bValue) {
-            continue
-        } else if (isObject(aValue) && isObject(bValue)) {
-            if (getPrototype(bValue) !== getPrototype(aValue)) {
-                diff = diff || {}
-                diff[aKey] = bValue
-            } else if (isHook(bValue)) {
-                 diff = diff || {}
-                 diff[aKey] = bValue
-            } else {
-                var objectDiff = diffProps(aValue, bValue)
-                if (objectDiff) {
-                    diff = diff || {}
-                    diff[aKey] = objectDiff
-                }
-            }
-        } else {
-            diff = diff || {}
-            diff[aKey] = bValue
-        }
-    }
-
-    for (var bKey in b) {
-        if (!(bKey in a)) {
-            diff = diff || {}
-            diff[bKey] = b[bKey]
-        }
-    }
-
-    return diff
-}
-
-function getPrototype(value) {
-  if (Object.getPrototypeOf) {
-    return Object.getPrototypeOf(value)
-  } else if (value.__proto__) {
-    return value.__proto__
-  } else if (value.constructor) {
-    return value.constructor.prototype
-  }
-}
-
-},{"../vnode/is-vhook":16,"is-object":3}],25:[function(require,module,exports){
-var isArray = require("x-is-array")
-
-var VPatch = require("../vnode/vpatch")
-var isVNode = require("../vnode/is-vnode")
-var isVText = require("../vnode/is-vtext")
-var isWidget = require("../vnode/is-widget")
-var isThunk = require("../vnode/is-thunk")
-var handleThunk = require("../vnode/handle-thunk")
-
-var diffProps = require("./diff-props")
-
-module.exports = diff
-
-function diff(a, b) {
-    var patch = { a: a }
-    walk(a, b, patch, 0)
-    return patch
-}
-
-function walk(a, b, patch, index) {
-    if (a === b) {
-        return
-    }
-
-    var apply = patch[index]
-    var applyClear = false
-
-    if (isThunk(a) || isThunk(b)) {
-        thunks(a, b, patch, index)
-    } else if (b == null) {
-
-        // If a is a widget we will add a remove patch for it
-        // Otherwise any child widgets/hooks must be destroyed.
-        // This prevents adding two remove patches for a widget.
-        if (!isWidget(a)) {
-            clearState(a, patch, index)
-            apply = patch[index]
-        }
-
-        apply = appendPatch(apply, new VPatch(VPatch.REMOVE, a, b))
-    } else if (isVNode(b)) {
-        if (isVNode(a)) {
-            if (a.tagName === b.tagName &&
-                a.namespace === b.namespace &&
-                a.key === b.key) {
-                var propsPatch = diffProps(a.properties, b.properties)
-                if (propsPatch) {
-                    apply = appendPatch(apply,
-                        new VPatch(VPatch.PROPS, a, propsPatch))
-                }
-                apply = diffChildren(a, b, patch, apply, index)
-            } else {
-                apply = appendPatch(apply, new VPatch(VPatch.VNODE, a, b))
-                applyClear = true
-            }
-        } else {
-            apply = appendPatch(apply, new VPatch(VPatch.VNODE, a, b))
-            applyClear = true
-        }
-    } else if (isVText(b)) {
-        if (!isVText(a)) {
-            apply = appendPatch(apply, new VPatch(VPatch.VTEXT, a, b))
-            applyClear = true
-        } else if (a.text !== b.text) {
-            apply = appendPatch(apply, new VPatch(VPatch.VTEXT, a, b))
-        }
-    } else if (isWidget(b)) {
-        if (!isWidget(a)) {
-            applyClear = true
-        }
-
-        apply = appendPatch(apply, new VPatch(VPatch.WIDGET, a, b))
-    }
-
-    if (apply) {
-        patch[index] = apply
-    }
-
-    if (applyClear) {
-        clearState(a, patch, index)
-    }
-}
-
-function diffChildren(a, b, patch, apply, index) {
-    var aChildren = a.children
-    var orderedSet = reorder(aChildren, b.children)
-    var bChildren = orderedSet.children
-
-    var aLen = aChildren.length
-    var bLen = bChildren.length
-    var len = aLen > bLen ? aLen : bLen
-
-    for (var i = 0; i < len; i++) {
-        var leftNode = aChildren[i]
-        var rightNode = bChildren[i]
-        index += 1
-
-        if (!leftNode) {
-            if (rightNode) {
-                // Excess nodes in b need to be added
-                apply = appendPatch(apply,
-                    new VPatch(VPatch.INSERT, null, rightNode))
-            }
-        } else {
-            walk(leftNode, rightNode, patch, index)
-        }
-
-        if (isVNode(leftNode) && leftNode.count) {
-            index += leftNode.count
-        }
-    }
-
-    if (orderedSet.moves) {
-        // Reorder nodes last
-        apply = appendPatch(apply, new VPatch(
-            VPatch.ORDER,
-            a,
-            orderedSet.moves
-        ))
-    }
-
-    return apply
-}
-
-function clearState(vNode, patch, index) {
-    // TODO: Make this a single walk, not two
-    unhook(vNode, patch, index)
-    destroyWidgets(vNode, patch, index)
-}
-
-// Patch records for all destroyed widgets must be added because we need
-// a DOM node reference for the destroy function
-function destroyWidgets(vNode, patch, index) {
-    if (isWidget(vNode)) {
-        if (typeof vNode.destroy === "function") {
-            patch[index] = appendPatch(
-                patch[index],
-                new VPatch(VPatch.REMOVE, vNode, null)
-            )
-        }
-    } else if (isVNode(vNode) && (vNode.hasWidgets || vNode.hasThunks)) {
-        var children = vNode.children
-        var len = children.length
-        for (var i = 0; i < len; i++) {
-            var child = children[i]
-            index += 1
-
-            destroyWidgets(child, patch, index)
-
-            if (isVNode(child) && child.count) {
-                index += child.count
-            }
-        }
-    } else if (isThunk(vNode)) {
-        thunks(vNode, null, patch, index)
-    }
-}
-
-// Create a sub-patch for thunks
-function thunks(a, b, patch, index) {
-    var nodes = handleThunk(a, b)
-    var thunkPatch = diff(nodes.a, nodes.b)
-    if (hasPatches(thunkPatch)) {
-        patch[index] = new VPatch(VPatch.THUNK, null, thunkPatch)
-    }
-}
-
-function hasPatches(patch) {
-    for (var index in patch) {
-        if (index !== "a") {
-            return true
-        }
-    }
-
-    return false
-}
-
-// Execute hooks when two nodes are identical
-function unhook(vNode, patch, index) {
-    if (isVNode(vNode)) {
-        if (vNode.hooks) {
-            patch[index] = appendPatch(
-                patch[index],
-                new VPatch(
-                    VPatch.PROPS,
-                    vNode,
-                    undefinedKeys(vNode.hooks)
-                )
-            )
-        }
-
-        if (vNode.descendantHooks || vNode.hasThunks) {
-            var children = vNode.children
-            var len = children.length
-            for (var i = 0; i < len; i++) {
-                var child = children[i]
-                index += 1
-
-                unhook(child, patch, index)
-
-                if (isVNode(child) && child.count) {
-                    index += child.count
-                }
-            }
-        }
-    } else if (isThunk(vNode)) {
-        thunks(vNode, null, patch, index)
-    }
-}
-
-function undefinedKeys(obj) {
-    var result = {}
-
-    for (var key in obj) {
-        result[key] = undefined
-    }
-
-    return result
-}
-
-// List diff, naive left to right reordering
-function reorder(aChildren, bChildren) {
-    // O(M) time, O(M) memory
-    var bChildIndex = keyIndex(bChildren)
-    var bKeys = bChildIndex.keys
-    var bFree = bChildIndex.free
-
-    if (bFree.length === bChildren.length) {
-        return {
-            children: bChildren,
-            moves: null
-        }
-    }
-
-    // O(N) time, O(N) memory
-    var aChildIndex = keyIndex(aChildren)
-    var aKeys = aChildIndex.keys
-    var aFree = aChildIndex.free
-
-    if (aFree.length === aChildren.length) {
-        return {
-            children: bChildren,
-            moves: null
-        }
-    }
-
-    // O(MAX(N, M)) memory
-    var newChildren = []
-
-    var freeIndex = 0
-    var freeCount = bFree.length
-    var deletedItems = 0
-
-    // Iterate through a and match a node in b
-    // O(N) time,
-    for (var i = 0 ; i < aChildren.length; i++) {
-        var aItem = aChildren[i]
-        var itemIndex
-
-        if (aItem.key) {
-            if (bKeys.hasOwnProperty(aItem.key)) {
-                // Match up the old keys
-                itemIndex = bKeys[aItem.key]
-                newChildren.push(bChildren[itemIndex])
-
-            } else {
-                // Remove old keyed items
-                itemIndex = i - deletedItems++
-                newChildren.push(null)
-            }
-        } else {
-            // Match the item in a with the next free item in b
-            if (freeIndex < freeCount) {
-                itemIndex = bFree[freeIndex++]
-                newChildren.push(bChildren[itemIndex])
-            } else {
-                // There are no free items in b to match with
-                // the free items in a, so the extra free nodes
-                // are deleted.
-                itemIndex = i - deletedItems++
-                newChildren.push(null)
-            }
-        }
-    }
-
-    var lastFreeIndex = freeIndex >= bFree.length ?
-        bChildren.length :
-        bFree[freeIndex]
-
-    // Iterate through b and append any new keys
-    // O(M) time
-    for (var j = 0; j < bChildren.length; j++) {
-        var newItem = bChildren[j]
-
-        if (newItem.key) {
-            if (!aKeys.hasOwnProperty(newItem.key)) {
-                // Add any new keyed items
-                // We are adding new items to the end and then sorting them
-                // in place. In future we should insert new items in place.
-                newChildren.push(newItem)
-            }
-        } else if (j >= lastFreeIndex) {
-            // Add any leftover non-keyed items
-            newChildren.push(newItem)
-        }
-    }
-
-    var simulate = newChildren.slice()
-    var simulateIndex = 0
-    var removes = []
-    var inserts = []
-    var simulateItem
-
-    for (var k = 0; k < bChildren.length;) {
-        var wantedItem = bChildren[k]
-        simulateItem = simulate[simulateIndex]
-
-        // remove items
-        while (simulateItem === null && simulate.length) {
-            removes.push(remove(simulate, simulateIndex, null))
-            simulateItem = simulate[simulateIndex]
-        }
-
-        if (!simulateItem || simulateItem.key !== wantedItem.key) {
-            // if we need a key in this position...
-            if (wantedItem.key) {
-                if (simulateItem && simulateItem.key) {
-                    // if an insert doesn't put this key in place, it needs to move
-                    if (bKeys[simulateItem.key] !== k + 1) {
-                        removes.push(remove(simulate, simulateIndex, simulateItem.key))
-                        simulateItem = simulate[simulateIndex]
-                        // if the remove didn't put the wanted item in place, we need to insert it
-                        if (!simulateItem || simulateItem.key !== wantedItem.key) {
-                            inserts.push({key: wantedItem.key, to: k})
-                        }
-                        // items are matching, so skip ahead
-                        else {
-                            simulateIndex++
-                        }
-                    }
-                    else {
-                        inserts.push({key: wantedItem.key, to: k})
-                    }
-                }
-                else {
-                    inserts.push({key: wantedItem.key, to: k})
-                }
-                k++
-            }
-            // a key in simulate has no matching wanted key, remove it
-            else if (simulateItem && simulateItem.key) {
-                removes.push(remove(simulate, simulateIndex, simulateItem.key))
-            }
-        }
-        else {
-            simulateIndex++
-            k++
-        }
-    }
-
-    // remove all the remaining nodes from simulate
-    while(simulateIndex < simulate.length) {
-        simulateItem = simulate[simulateIndex]
-        removes.push(remove(simulate, simulateIndex, simulateItem && simulateItem.key))
-    }
-
-    // If the only moves we have are deletes then we can just
-    // let the delete patch remove these items.
-    if (removes.length === deletedItems && !inserts.length) {
-        return {
-            children: newChildren,
-            moves: null
-        }
-    }
-
-    return {
-        children: newChildren,
-        moves: {
-            removes: removes,
-            inserts: inserts
-        }
-    }
-}
-
-function remove(arr, index, key) {
-    arr.splice(index, 1)
-
-    return {
-        from: index,
-        key: key
-    }
-}
-
-function keyIndex(children) {
-    var keys = {}
-    var free = []
-    var length = children.length
-
-    for (var i = 0; i < length; i++) {
-        var child = children[i]
-
-        if (child.key) {
-            keys[child.key] = i
-        } else {
-            free.push(i)
-        }
-    }
-
-    return {
-        keys: keys,     // A hash of key name to index
-        free: free      // An array of unkeyed item indices
-    }
-}
-
-function appendPatch(apply, patch) {
-    if (apply) {
-        if (isArray(apply)) {
-            apply.push(patch)
-        } else {
-            apply = [apply, patch]
-        }
-
-        return apply
-    } else {
-        return patch
-    }
-}
-
-},{"../vnode/handle-thunk":14,"../vnode/is-thunk":15,"../vnode/is-vnode":17,"../vnode/is-vtext":18,"../vnode/is-widget":19,"../vnode/vpatch":22,"./diff-props":24,"x-is-array":26}],26:[function(require,module,exports){
-var nativeIsArray = Array.isArray
-var toString = Object.prototype.toString
-
-module.exports = nativeIsArray || isArray
-
-function isArray(obj) {
-    return toString.call(obj) === "[object Array]"
-}
-
-},{}],27:[function(require,module,exports){
-// Generated by psc-bundle 0.10.3
+// Generated by psc-bundle 0.10.7
 var PS = {};
 (function(exports) {
     "use strict";
@@ -1259,7 +16,7 @@ var PS = {};
   };
 })(PS["Data.Functor"] = PS["Data.Functor"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Semigroupoid = function (compose) {
       this.compose = compose;
@@ -1279,7 +36,7 @@ var PS = {};
   exports["semigroupoidFn"] = semigroupoidFn;
 })(PS["Control.Semigroupoid"] = PS["Control.Semigroupoid"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Control_Semigroupoid = PS["Control.Semigroupoid"];        
   var Category = function (__superclass_Control$dotSemigroupoid$dotSemigroupoid_0, id) {
@@ -1299,7 +56,7 @@ var PS = {};
   exports["categoryFn"] = categoryFn;
 })(PS["Control.Category"] = PS["Control.Category"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Control_Category = PS["Control.Category"];
   var flip = function (f) {
@@ -1371,7 +128,7 @@ var PS = {};
   };
 })(PS["Data.Show"] = PS["Data.Show"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Data.Show"];     
   var Show = function (show) {
@@ -1390,14 +147,14 @@ var PS = {};
   exports["showString"] = showString;
 })(PS["Data.Show"] = PS["Data.Show"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Data.Unit"];
   var Data_Show = PS["Data.Show"];
   exports["unit"] = $foreign.unit;
 })(PS["Data.Unit"] = PS["Data.Unit"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Data.Functor"];
   var Data_Function = PS["Data.Function"];
@@ -1419,18 +176,12 @@ var PS = {};
           };
       };
   };
-  var voidRight = function (dictFunctor) {
-      return function (x) {
-          return map(dictFunctor)(Data_Function["const"](x));
-      };
-  };
   var functorFn = new Functor(Control_Semigroupoid.compose(Control_Semigroupoid.semigroupoidFn));
   var functorArray = new Functor($foreign.arrayMap);
   exports["Functor"] = Functor;
   exports["map"] = map;
   exports["void"] = $$void;
   exports["voidLeft"] = voidLeft;
-  exports["voidRight"] = voidRight;
   exports["functorFn"] = functorFn;
   exports["functorArray"] = functorArray;
 })(PS["Data.Functor"] = PS["Data.Functor"] || {});
@@ -1442,17 +193,9 @@ var PS = {};
       return s1 + s2;
     };
   };
-
-  exports.concatArray = function (xs) {
-    return function (ys) {
-      if (xs.length === 0) return ys;
-      if (ys.length === 0) return xs;
-      return xs.concat(ys);
-    };
-  };
 })(PS["Data.Semigroup"] = PS["Data.Semigroup"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Data.Semigroup"];
   var Data_Unit = PS["Data.Unit"];
@@ -1461,17 +204,15 @@ var PS = {};
       this.append = append;
   }; 
   var semigroupString = new Semigroup($foreign.concatString);
-  var semigroupArray = new Semigroup($foreign.concatArray);
   var append = function (dict) {
       return dict.append;
   };
   exports["Semigroup"] = Semigroup;
   exports["append"] = append;
   exports["semigroupString"] = semigroupString;
-  exports["semigroupArray"] = semigroupArray;
 })(PS["Data.Semigroup"] = PS["Data.Semigroup"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Data_Functor = PS["Data.Functor"];
   var Data_Semigroup = PS["Data.Semigroup"];        
@@ -1486,7 +227,7 @@ var PS = {};
   exports["alt"] = alt;
 })(PS["Control.Alt"] = PS["Control.Alt"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Control.Apply"];
   var Data_Functor = PS["Data.Functor"];
@@ -1529,7 +270,7 @@ var PS = {};
   exports["lift2"] = lift2;
 })(PS["Control.Apply"] = PS["Control.Apply"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Control_Apply = PS["Control.Apply"];
   var Data_Functor = PS["Data.Functor"];
@@ -1581,7 +322,7 @@ var PS = {};
   exports["when"] = when;
 })(PS["Control.Applicative"] = PS["Control.Applicative"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Control_Alt = PS["Control.Alt"];
   var Data_Functor = PS["Data.Functor"];        
@@ -1596,7 +337,7 @@ var PS = {};
   exports["empty"] = empty;
 })(PS["Control.Plus"] = PS["Control.Plus"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Control_Alt = PS["Control.Alt"];
   var Control_Applicative = PS["Control.Applicative"];
@@ -1610,14 +351,364 @@ var PS = {};
   exports["Alternative"] = Alternative;
 })(PS["Control.Alternative"] = PS["Control.Alternative"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+    "use strict";
+
+  // module Unsafe.Coerce
+
+  exports.unsafeCoerce = function (x) {
+    return x;
+  };
+})(PS["Unsafe.Coerce"] = PS["Unsafe.Coerce"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var $foreign = PS["Unsafe.Coerce"];
+  exports["unsafeCoerce"] = $foreign.unsafeCoerce;
+})(PS["Unsafe.Coerce"] = PS["Unsafe.Coerce"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Unsafe_Coerce = PS["Unsafe.Coerce"];        
+  var runExists = Unsafe_Coerce.unsafeCoerce;
+  var mkExists = Unsafe_Coerce.unsafeCoerce;
+  exports["mkExists"] = mkExists;
+  exports["runExists"] = runExists;
+})(PS["Data.Exists"] = PS["Data.Exists"] || {});
+(function(exports) {
+    "use strict";
+
+  exports.refEq = function (r1) {
+    return function (r2) {
+      return r1 === r2;
+    };
+  };
+})(PS["Data.Eq"] = PS["Data.Eq"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var $foreign = PS["Data.Eq"];
+  var Data_Unit = PS["Data.Unit"];
+  var Data_Void = PS["Data.Void"];        
+  var Eq = function (eq) {
+      this.eq = eq;
+  };
+  var eqVoid = new Eq(function (v) {
+      return function (v1) {
+          return true;
+      };
+  });
+  var eqString = new Eq($foreign.refEq);
+  var eqInt = new Eq($foreign.refEq);
+  var eq = function (dict) {
+      return dict.eq;
+  };
+  exports["Eq"] = Eq;
+  exports["eq"] = eq;
+  exports["eqInt"] = eqInt;
+  exports["eqString"] = eqString;
+  exports["eqVoid"] = eqVoid;
+})(PS["Data.Eq"] = PS["Data.Eq"] || {});
+(function(exports) {
+    "use strict";
+
+  exports.unsafeCompareImpl = function (lt) {
+    return function (eq) {
+      return function (gt) {
+        return function (x) {
+          return function (y) {
+            return x < y ? lt : x === y ? eq : gt;
+          };
+        };
+      };
+    };
+  };
+})(PS["Data.Ord.Unsafe"] = PS["Data.Ord.Unsafe"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Data_Eq = PS["Data.Eq"];
+  var Data_Semigroup = PS["Data.Semigroup"];
+  var Data_Show = PS["Data.Show"];        
+  var LT = (function () {
+      function LT() {
+
+      };
+      LT.value = new LT();
+      return LT;
+  })();
+  var GT = (function () {
+      function GT() {
+
+      };
+      GT.value = new GT();
+      return GT;
+  })();
+  var EQ = (function () {
+      function EQ() {
+
+      };
+      EQ.value = new EQ();
+      return EQ;
+  })();
+  exports["LT"] = LT;
+  exports["GT"] = GT;
+  exports["EQ"] = EQ;
+})(PS["Data.Ordering"] = PS["Data.Ordering"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var $foreign = PS["Data.Ord.Unsafe"];
+  var Data_Ordering = PS["Data.Ordering"];        
+  var unsafeCompare = $foreign.unsafeCompareImpl(Data_Ordering.LT.value)(Data_Ordering.EQ.value)(Data_Ordering.GT.value);
+  exports["unsafeCompare"] = unsafeCompare;
+})(PS["Data.Ord.Unsafe"] = PS["Data.Ord.Unsafe"] || {});
+(function(exports) {
+    "use strict";
+
+  exports.intAdd = function (x) {
+    return function (y) {
+      /* jshint bitwise: false */
+      return x + y | 0;
+    };
+  };
+
+  exports.intMul = function (x) {
+    return function (y) {
+      /* jshint bitwise: false */
+      return x * y | 0;
+    };
+  };
+})(PS["Data.Semiring"] = PS["Data.Semiring"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var $foreign = PS["Data.Semiring"];
+  var Data_Unit = PS["Data.Unit"];        
+  var Semiring = function (add, mul, one, zero) {
+      this.add = add;
+      this.mul = mul;
+      this.one = one;
+      this.zero = zero;
+  };
+  var zero = function (dict) {
+      return dict.zero;
+  };                                                                            
+  var semiringInt = new Semiring($foreign.intAdd, $foreign.intMul, 1, 0);
+  var one = function (dict) {
+      return dict.one;
+  };
+  var mul = function (dict) {
+      return dict.mul;
+  };
+  var add = function (dict) {
+      return dict.add;
+  };
+  exports["Semiring"] = Semiring;
+  exports["add"] = add;
+  exports["mul"] = mul;
+  exports["one"] = one;
+  exports["zero"] = zero;
+  exports["semiringInt"] = semiringInt;
+})(PS["Data.Semiring"] = PS["Data.Semiring"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var $foreign = PS["Data.Ord"];
+  var Data_Eq = PS["Data.Eq"];
+  var Data_Function = PS["Data.Function"];
+  var Data_Ord_Unsafe = PS["Data.Ord.Unsafe"];
+  var Data_Ordering = PS["Data.Ordering"];
+  var Data_Ring = PS["Data.Ring"];
+  var Data_Unit = PS["Data.Unit"];
+  var Data_Void = PS["Data.Void"];
+  var Data_Semiring = PS["Data.Semiring"];        
+  var Ord = function (__superclass_Data$dotEq$dotEq_0, compare) {
+      this["__superclass_Data.Eq.Eq_0"] = __superclass_Data$dotEq$dotEq_0;
+      this.compare = compare;
+  };
+  var ordVoid = new Ord(function () {
+      return Data_Eq.eqVoid;
+  }, function (v) {
+      return function (v1) {
+          return Data_Ordering.EQ.value;
+      };
+  });
+  var ordString = new Ord(function () {
+      return Data_Eq.eqString;
+  }, Data_Ord_Unsafe.unsafeCompare);
+  var ordInt = new Ord(function () {
+      return Data_Eq.eqInt;
+  }, Data_Ord_Unsafe.unsafeCompare);
+  var compare = function (dict) {
+      return dict.compare;
+  };
+  exports["Ord"] = Ord;
+  exports["compare"] = compare;
+  exports["ordInt"] = ordInt;
+  exports["ordString"] = ordString;
+  exports["ordVoid"] = ordVoid;
+})(PS["Data.Ord"] = PS["Data.Ord"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var otherwise = true;
+  exports["otherwise"] = otherwise;
+})(PS["Data.Boolean"] = PS["Data.Boolean"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Data_Semigroup = PS["Data.Semigroup"];
+  var Data_Unit = PS["Data.Unit"];
+  var Data_Function = PS["Data.Function"];
+  var Data_Ord = PS["Data.Ord"];
+  var Data_Eq = PS["Data.Eq"];
+  var Data_EuclideanRing = PS["Data.EuclideanRing"];
+  var Data_Boolean = PS["Data.Boolean"];        
+  var Monoid = function (__superclass_Data$dotSemigroup$dotSemigroup_0, mempty) {
+      this["__superclass_Data.Semigroup.Semigroup_0"] = __superclass_Data$dotSemigroup$dotSemigroup_0;
+      this.mempty = mempty;
+  };                 
+  var monoidString = new Monoid(function () {
+      return Data_Semigroup.semigroupString;
+  }, "");  
+  var mempty = function (dict) {
+      return dict.mempty;
+  };
+  exports["Monoid"] = Monoid;
+  exports["mempty"] = mempty;
+  exports["monoidString"] = monoidString;
+})(PS["Data.Monoid"] = PS["Data.Monoid"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Data_Function = PS["Data.Function"];
+  var Control_Semigroupoid = PS["Control.Semigroupoid"];
+  var Data_Functor = PS["Data.Functor"];        
+  var Newtype = function (unwrap, wrap) {
+      this.unwrap = unwrap;
+      this.wrap = wrap;
+  };
+  var wrap = function (dict) {
+      return dict.wrap;
+  };
+  var unwrap = function (dict) {
+      return dict.unwrap;
+  };
+  var alaF = function (dictFunctor) {
+      return function (dictFunctor1) {
+          return function (dictNewtype) {
+              return function (dictNewtype1) {
+                  return function (v) {
+                      return function (f) {
+                          return function ($64) {
+                              return Data_Functor.map(dictFunctor1)(unwrap(dictNewtype1))(f(Data_Functor.map(dictFunctor)(wrap(dictNewtype))($64)));
+                          };
+                      };
+                  };
+              };
+          };
+      };
+  };
+  exports["Newtype"] = Newtype;
+  exports["alaF"] = alaF;
+  exports["unwrap"] = unwrap;
+  exports["wrap"] = wrap;
+})(PS["Data.Newtype"] = PS["Data.Newtype"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Data_Const = PS["Data.Const"];
+  var Data_Exists = PS["Data.Exists"];
+  var Data_Monoid = PS["Data.Monoid"];
+  var Data_Newtype = PS["Data.Newtype"];
+  var Data_Functor = PS["Data.Functor"];
+  var Control_Semigroupoid = PS["Control.Semigroupoid"];
+  var Data_Unit = PS["Data.Unit"];
+  var Control_Apply = PS["Control.Apply"];
+  var Data_Function = PS["Data.Function"];
+  var Control_Applicative = PS["Control.Applicative"];
+  var Control_Category = PS["Control.Category"];        
+  var ApF = (function () {
+      function ApF(value0, value1) {
+          this.value0 = value0;
+          this.value1 = value1;
+      };
+      ApF.create = function (value0) {
+          return function (value1) {
+              return new ApF(value0, value1);
+          };
+      };
+      return ApF;
+  })();
+  var Pure = (function () {
+      function Pure(value0) {
+          this.value0 = value0;
+      };
+      Pure.create = function (value0) {
+          return new Pure(value0);
+      };
+      return Pure;
+  })();
+  var Ap = (function () {
+      function Ap(value0) {
+          this.value0 = value0;
+      };
+      Ap.create = function (value0) {
+          return new Ap(value0);
+      };
+      return Ap;
+  })();
+  var retractFreeAp = function (dictApplicative) {
+      return function (v) {
+          if (v instanceof Pure) {
+              return Control_Applicative.pure(dictApplicative)(v.value0);
+          };
+          if (v instanceof Ap) {
+              return Data_Exists.runExists(function (v1) {
+                  return Control_Apply.apply(dictApplicative["__superclass_Control.Apply.Apply_0"]())(retractFreeAp(dictApplicative)(v1.value1(Data_Unit.unit)))(v1.value0(Data_Unit.unit));
+              })(v.value0);
+          };
+          throw new Error("Failed pattern match at Control.Applicative.Free line 33, column 1 - line 33, column 32: " + [ v.constructor.name ]);
+      };
+  };
+  var ap = function (v) {
+      return function (k) {
+          return new Ap(Data_Exists.mkExists(new ApF(v, k)));
+      };
+  };              
+  var hoistFreeAp = function (k) {
+      return function (v) {
+          if (v instanceof Pure) {
+              return new Pure(v.value0);
+          };
+          if (v instanceof Ap) {
+              return Data_Exists.runExists(function (v1) {
+                  return ap(function (v3) {
+                      return k(v1.value0(Data_Unit.unit));
+                  })(function (v3) {
+                      return hoistFreeAp(k)(v1.value1(Data_Unit.unit));
+                  });
+              })(v.value0);
+          };
+          throw new Error("Failed pattern match at Control.Applicative.Free line 45, column 1 - line 45, column 32: " + [ k.constructor.name, v.constructor.name ]);
+      };
+  };
+  exports["hoistFreeAp"] = hoistFreeAp;
+  exports["retractFreeAp"] = retractFreeAp;
+})(PS["Control.Applicative.Free"] = PS["Control.Applicative.Free"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Control.Bind"];
   var Control_Applicative = PS["Control.Applicative"];
   var Control_Apply = PS["Control.Apply"];
   var Control_Category = PS["Control.Category"];
   var Data_Function = PS["Data.Function"];
-  var Data_Functor = PS["Data.Functor"];        
+  var Data_Functor = PS["Data.Functor"];
+  var Data_Unit = PS["Data.Unit"];        
   var Bind = function (__superclass_Control$dotApply$dotApply_0, bind) {
       this["__superclass_Control.Apply.Apply_0"] = __superclass_Control$dotApply$dotApply_0;
       this.bind = bind;
@@ -1643,7 +734,7 @@ var PS = {};
   exports["composeKleisliFlipped"] = composeKleisliFlipped;
 })(PS["Control.Bind"] = PS["Control.Bind"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Control_Category = PS["Control.Category"];        
   var Bifunctor = function (bimap) {
@@ -1695,202 +786,7 @@ var PS = {};
   };
 })(PS["Data.Foldable"] = PS["Data.Foldable"] || {});
 (function(exports) {
-    "use strict";
-
-  exports.refEq = function (r1) {
-    return function (r2) {
-      return r1 === r2;
-    };
-  };
-})(PS["Data.Eq"] = PS["Data.Eq"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var $foreign = PS["Data.Eq"];
-  var Data_Unit = PS["Data.Unit"];
-  var Data_Void = PS["Data.Void"];        
-  var Eq = function (eq) {
-      this.eq = eq;
-  }; 
-  var eqString = new Eq($foreign.refEq);
-  var eqInt = new Eq($foreign.refEq);    
-  var eq = function (dict) {
-      return dict.eq;
-  };
-  exports["Eq"] = Eq;
-  exports["eq"] = eq;
-  exports["eqInt"] = eqInt;
-  exports["eqString"] = eqString;
-})(PS["Data.Eq"] = PS["Data.Eq"] || {});
-(function(exports) {
-    "use strict";
-
-  exports.unsafeCompareImpl = function (lt) {
-    return function (eq) {
-      return function (gt) {
-        return function (x) {
-          return function (y) {
-            return x < y ? lt : x === y ? eq : gt;
-          };
-        };
-      };
-    };
-  };
-})(PS["Data.Ord.Unsafe"] = PS["Data.Ord.Unsafe"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Data_Eq = PS["Data.Eq"];
-  var Data_Semigroup = PS["Data.Semigroup"];
-  var Data_Show = PS["Data.Show"];        
-  var LT = (function () {
-      function LT() {
-
-      };
-      LT.value = new LT();
-      return LT;
-  })();
-  var GT = (function () {
-      function GT() {
-
-      };
-      GT.value = new GT();
-      return GT;
-  })();
-  var EQ = (function () {
-      function EQ() {
-
-      };
-      EQ.value = new EQ();
-      return EQ;
-  })();
-  exports["LT"] = LT;
-  exports["GT"] = GT;
-  exports["EQ"] = EQ;
-})(PS["Data.Ordering"] = PS["Data.Ordering"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var $foreign = PS["Data.Ord.Unsafe"];
-  var Data_Ordering = PS["Data.Ordering"];        
-  var unsafeCompare = $foreign.unsafeCompareImpl(Data_Ordering.LT.value)(Data_Ordering.EQ.value)(Data_Ordering.GT.value);
-  exports["unsafeCompare"] = unsafeCompare;
-})(PS["Data.Ord.Unsafe"] = PS["Data.Ord.Unsafe"] || {});
-(function(exports) {
-    "use strict";
-
-  exports.intAdd = function (x) {
-    return function (y) {
-      /* jshint bitwise: false */
-      return x + y | 0;
-    };
-  };
-
-  exports.intMul = function (x) {
-    return function (y) {
-      /* jshint bitwise: false */
-      return x * y | 0;
-    };
-  };
-})(PS["Data.Semiring"] = PS["Data.Semiring"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var $foreign = PS["Data.Semiring"];
-  var Data_Unit = PS["Data.Unit"];        
-  var Semiring = function (add, mul, one, zero) {
-      this.add = add;
-      this.mul = mul;
-      this.one = one;
-      this.zero = zero;
-  };
-  var zero = function (dict) {
-      return dict.zero;
-  };                                                                            
-  var semiringInt = new Semiring($foreign.intAdd, $foreign.intMul, 1, 0);
-  var one = function (dict) {
-      return dict.one;
-  };
-  var mul = function (dict) {
-      return dict.mul;
-  };
-  var add = function (dict) {
-      return dict.add;
-  };
-  exports["Semiring"] = Semiring;
-  exports["add"] = add;
-  exports["mul"] = mul;
-  exports["one"] = one;
-  exports["zero"] = zero;
-  exports["semiringInt"] = semiringInt;
-})(PS["Data.Semiring"] = PS["Data.Semiring"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var $foreign = PS["Data.Ord"];
-  var Data_Eq = PS["Data.Eq"];
-  var Data_Function = PS["Data.Function"];
-  var Data_Ord_Unsafe = PS["Data.Ord.Unsafe"];
-  var Data_Ordering = PS["Data.Ordering"];
-  var Data_Ring = PS["Data.Ring"];
-  var Data_Unit = PS["Data.Unit"];
-  var Data_Void = PS["Data.Void"];
-  var Data_Semiring = PS["Data.Semiring"];        
-  var Ord = function (__superclass_Data$dotEq$dotEq_0, compare) {
-      this["__superclass_Data.Eq.Eq_0"] = __superclass_Data$dotEq$dotEq_0;
-      this.compare = compare;
-  }; 
-  var ordString = new Ord(function () {
-      return Data_Eq.eqString;
-  }, Data_Ord_Unsafe.unsafeCompare);
-  var ordInt = new Ord(function () {
-      return Data_Eq.eqInt;
-  }, Data_Ord_Unsafe.unsafeCompare);
-  var compare = function (dict) {
-      return dict.compare;
-  };
-  exports["Ord"] = Ord;
-  exports["compare"] = compare;
-  exports["ordInt"] = ordInt;
-  exports["ordString"] = ordString;
-})(PS["Data.Ord"] = PS["Data.Ord"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var otherwise = true;
-  exports["otherwise"] = otherwise;
-})(PS["Data.Boolean"] = PS["Data.Boolean"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Data_Semigroup = PS["Data.Semigroup"];
-  var Data_Unit = PS["Data.Unit"];
-  var Data_Function = PS["Data.Function"];
-  var Data_Ord = PS["Data.Ord"];
-  var Data_Eq = PS["Data.Eq"];
-  var Data_EuclideanRing = PS["Data.EuclideanRing"];
-  var Data_Boolean = PS["Data.Boolean"];        
-  var Monoid = function (__superclass_Data$dotSemigroup$dotSemigroup_0, mempty) {
-      this["__superclass_Data.Semigroup.Semigroup_0"] = __superclass_Data$dotSemigroup$dotSemigroup_0;
-      this.mempty = mempty;
-  };                 
-  var monoidString = new Monoid(function () {
-      return Data_Semigroup.semigroupString;
-  }, "");
-  var monoidArray = new Monoid(function () {
-      return Data_Semigroup.semigroupArray;
-  }, [  ]);
-  var mempty = function (dict) {
-      return dict.mempty;
-  };
-  exports["Monoid"] = Monoid;
-  exports["mempty"] = mempty;
-  exports["monoidString"] = monoidString;
-  exports["monoidArray"] = monoidArray;
-})(PS["Data.Monoid"] = PS["Data.Monoid"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Control_Applicative = PS["Control.Applicative"];
   var Control_Apply = PS["Control.Apply"];
@@ -1922,7 +818,7 @@ var PS = {};
   exports.bottomInt = -2147483648;
 })(PS["Data.Bounded"] = PS["Data.Bounded"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Data.Bounded"];
   var Data_Ord = PS["Data.Ord"];
@@ -1948,7 +844,7 @@ var PS = {};
   exports["boundedInt"] = boundedInt;
 })(PS["Data.Bounded"] = PS["Data.Bounded"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Alt = PS["Control.Alt"];
@@ -1956,16 +852,16 @@ var PS = {};
   var Control_Extend = PS["Control.Extend"];
   var Control_MonadZero = PS["Control.MonadZero"];
   var Control_Plus = PS["Control.Plus"];
+  var Data_Eq = PS["Data.Eq"];
   var Data_Functor_Invariant = PS["Data.Functor.Invariant"];
   var Data_Monoid = PS["Data.Monoid"];
+  var Data_Ord = PS["Data.Ord"];
   var Data_Functor = PS["Data.Functor"];
   var Control_Apply = PS["Control.Apply"];
   var Control_Applicative = PS["Control.Applicative"];
   var Control_Bind = PS["Control.Bind"];
   var Control_Monad = PS["Control.Monad"];
   var Data_Semigroup = PS["Data.Semigroup"];
-  var Data_Eq = PS["Data.Eq"];
-  var Data_Ord = PS["Data.Ord"];
   var Data_Ordering = PS["Data.Ordering"];
   var Data_Bounded = PS["Data.Bounded"];
   var Data_Show = PS["Data.Show"];
@@ -1997,7 +893,7 @@ var PS = {};
               if (v2 instanceof Just) {
                   return v1(v2.value0);
               };
-              throw new Error("Failed pattern match at Data.Maybe line 214, column 1 - line 214, column 22: " + [ v.constructor.name, v1.constructor.name, v2.constructor.name ]);
+              throw new Error("Failed pattern match at Data.Maybe line 220, column 1 - line 220, column 22: " + [ v.constructor.name, v1.constructor.name, v2.constructor.name ]);
           };
       };
   };
@@ -2011,20 +907,8 @@ var PS = {};
           return Nothing.value;
       };
   });
-  var fromJust = function (dictPartial) {
-      return function (v) {
-          var __unused = function (dictPartial1) {
-              return function ($dollar33) {
-                  return $dollar33;
-              };
-          };
-          return __unused(dictPartial)((function () {
-              if (v instanceof Just) {
-                  return v.value0;
-              };
-              throw new Error("Failed pattern match at Data.Maybe line 265, column 1 - line 265, column 21: " + [ v.constructor.name ]);
-          })());
-      };
+  var fromMaybe = function (a) {
+      return maybe(a)(Control_Category.id(Control_Category.categoryFn));
   };
   var applyMaybe = new Control_Apply.Apply(function () {
       return functorMaybe;
@@ -2036,7 +920,7 @@ var PS = {};
           if (v instanceof Nothing) {
               return Nothing.value;
           };
-          throw new Error("Failed pattern match at Data.Maybe line 67, column 3 - line 67, column 31: " + [ v.constructor.name, v1.constructor.name ]);
+          throw new Error("Failed pattern match at Data.Maybe line 69, column 3 - line 69, column 31: " + [ v.constructor.name, v1.constructor.name ]);
       };
   });
   var bindMaybe = new Control_Bind.Bind(function () {
@@ -2049,12 +933,12 @@ var PS = {};
           if (v instanceof Nothing) {
               return Nothing.value;
           };
-          throw new Error("Failed pattern match at Data.Maybe line 126, column 3 - line 126, column 24: " + [ v.constructor.name, v1.constructor.name ]);
+          throw new Error("Failed pattern match at Data.Maybe line 128, column 3 - line 128, column 24: " + [ v.constructor.name, v1.constructor.name ]);
       };
   });
   exports["Nothing"] = Nothing;
   exports["Just"] = Just;
-  exports["fromJust"] = fromJust;
+  exports["fromMaybe"] = fromMaybe;
   exports["isJust"] = isJust;
   exports["isNothing"] = isNothing;
   exports["maybe"] = maybe;
@@ -2082,7 +966,7 @@ var PS = {};
   };
 })(PS["Data.HeytingAlgebra"] = PS["Data.HeytingAlgebra"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Data.HeytingAlgebra"];
   var Data_Unit = PS["Data.Unit"];        
@@ -2117,6 +1001,35 @@ var PS = {};
   var conj = function (dict) {
       return dict.conj;
   };
+  var heytingAlgebraFunction = function (dictHeytingAlgebra) {
+      return new HeytingAlgebra(function (f) {
+          return function (g) {
+              return function (a) {
+                  return conj(dictHeytingAlgebra)(f(a))(g(a));
+              };
+          };
+      }, function (f) {
+          return function (g) {
+              return function (a) {
+                  return disj(dictHeytingAlgebra)(f(a))(g(a));
+              };
+          };
+      }, function (v) {
+          return ff(dictHeytingAlgebra);
+      }, function (f) {
+          return function (g) {
+              return function (a) {
+                  return implies(dictHeytingAlgebra)(f(a))(g(a));
+              };
+          };
+      }, function (f) {
+          return function (a) {
+              return not(dictHeytingAlgebra)(f(a));
+          };
+      }, function (v) {
+          return tt(dictHeytingAlgebra);
+      });
+  };
   exports["HeytingAlgebra"] = HeytingAlgebra;
   exports["conj"] = conj;
   exports["disj"] = disj;
@@ -2125,45 +1038,10 @@ var PS = {};
   exports["not"] = not;
   exports["tt"] = tt;
   exports["heytingAlgebraBoolean"] = heytingAlgebraBoolean;
+  exports["heytingAlgebraFunction"] = heytingAlgebraFunction;
 })(PS["Data.HeytingAlgebra"] = PS["Data.HeytingAlgebra"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Control_Semigroupoid = PS["Control.Semigroupoid"];
-  var Data_Functor = PS["Data.Functor"];        
-  var Newtype = function (unwrap, wrap) {
-      this.unwrap = unwrap;
-      this.wrap = wrap;
-  };
-  var wrap = function (dict) {
-      return dict.wrap;
-  };
-  var unwrap = function (dict) {
-      return dict.unwrap;
-  };
-  var alaF = function (dictFunctor) {
-      return function (dictFunctor1) {
-          return function (dictNewtype) {
-              return function (dictNewtype1) {
-                  return function (v) {
-                      return function (f) {
-                          return function ($32) {
-                              return Data_Functor.map(dictFunctor1)(unwrap(dictNewtype1))(f(Data_Functor.map(dictFunctor)(wrap(dictNewtype))($32)));
-                          };
-                      };
-                  };
-              };
-          };
-      };
-  };
-  exports["Newtype"] = Newtype;
-  exports["alaF"] = alaF;
-  exports["unwrap"] = unwrap;
-  exports["wrap"] = wrap;
-})(PS["Data.Newtype"] = PS["Data.Newtype"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Comonad = PS["Control.Comonad"];
@@ -2207,7 +1085,7 @@ var PS = {};
   exports["monoidConj"] = monoidConj;
 })(PS["Data.Monoid.Conj"] = PS["Data.Monoid.Conj"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Data.Foldable"];
   var Prelude = PS["Prelude"];
@@ -2259,6 +1137,11 @@ var PS = {};
           return Data_Function.flip(traverse_(dictApplicative)(dictFoldable));
       };
   };
+  var sequence_ = function (dictApplicative) {
+      return function (dictFoldable) {
+          return traverse_(dictApplicative)(dictFoldable)(Control_Category.id(Control_Category.categoryFn));
+      };
+  };
   var foldl = function (dict) {
       return dict.foldl;
   };
@@ -2293,6 +1176,43 @@ var PS = {};
           return foldl(dictFoldable)(Data_Semiring.add(dictSemiring))(Data_Semiring.zero(dictSemiring));
       };
   }; 
+  var foldableMaybe = new Foldable(function (dictMonoid) {
+      return function (f) {
+          return function (v) {
+              if (v instanceof Data_Maybe.Nothing) {
+                  return Data_Monoid.mempty(dictMonoid);
+              };
+              if (v instanceof Data_Maybe.Just) {
+                  return f(v.value0);
+              };
+              throw new Error("Failed pattern match at Data.Foldable line 126, column 3 - line 126, column 30: " + [ f.constructor.name, v.constructor.name ]);
+          };
+      };
+  }, function (v) {
+      return function (z) {
+          return function (v1) {
+              if (v1 instanceof Data_Maybe.Nothing) {
+                  return z;
+              };
+              if (v1 instanceof Data_Maybe.Just) {
+                  return v(z)(v1.value0);
+              };
+              throw new Error("Failed pattern match at Data.Foldable line 124, column 3 - line 124, column 25: " + [ v.constructor.name, z.constructor.name, v1.constructor.name ]);
+          };
+      };
+  }, function (v) {
+      return function (z) {
+          return function (v1) {
+              if (v1 instanceof Data_Maybe.Nothing) {
+                  return z;
+              };
+              if (v1 instanceof Data_Maybe.Just) {
+                  return v(v1.value0)(z);
+              };
+              throw new Error("Failed pattern match at Data.Foldable line 122, column 3 - line 122, column 25: " + [ v.constructor.name, z.constructor.name, v1.constructor.name ]);
+          };
+      };
+  });
   var foldMapDefaultR = function (dictFoldable) {
       return function (dictMonoid) {
           return function (f) {
@@ -2327,12 +1247,14 @@ var PS = {};
   exports["foldr"] = foldr;
   exports["for_"] = for_;
   exports["intercalate"] = intercalate;
+  exports["sequence_"] = sequence_;
   exports["sum"] = sum;
   exports["traverse_"] = traverse_;
   exports["foldableArray"] = foldableArray;
+  exports["foldableMaybe"] = foldableMaybe;
 })(PS["Data.Foldable"] = PS["Data.Foldable"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Alt = PS["Control.Alt"];
@@ -2340,9 +1262,11 @@ var PS = {};
   var Data_Bifoldable = PS["Data.Bifoldable"];
   var Data_Bifunctor = PS["Data.Bifunctor"];
   var Data_Bitraversable = PS["Data.Bitraversable"];
+  var Data_Eq = PS["Data.Eq"];
   var Data_Foldable = PS["Data.Foldable"];
   var Data_Functor_Invariant = PS["Data.Functor.Invariant"];
   var Data_Monoid = PS["Data.Monoid"];
+  var Data_Ord = PS["Data.Ord"];
   var Data_Traversable = PS["Data.Traversable"];
   var Data_Functor = PS["Data.Functor"];
   var Control_Apply = PS["Control.Apply"];
@@ -2351,8 +1275,6 @@ var PS = {};
   var Control_Monad = PS["Control.Monad"];
   var Data_Show = PS["Data.Show"];
   var Data_Semigroup = PS["Data.Semigroup"];
-  var Data_Eq = PS["Data.Eq"];
-  var Data_Ord = PS["Data.Ord"];
   var Data_Ordering = PS["Data.Ordering"];
   var Data_Bounded = PS["Data.Bounded"];
   var Data_Semiring = PS["Data.Semiring"];
@@ -2383,7 +1305,7 @@ var PS = {};
           if (v1 instanceof Right) {
               return new Right(v(v1.value0));
           };
-          throw new Error("Failed pattern match at Data.Either line 35, column 3 - line 35, column 26: " + [ v.constructor.name, v1.constructor.name ]);
+          throw new Error("Failed pattern match at Data.Either line 37, column 3 - line 37, column 26: " + [ v.constructor.name, v1.constructor.name ]);
       };
   });
   var either = function (v) {
@@ -2395,7 +1317,7 @@ var PS = {};
               if (v2 instanceof Right) {
                   return v1(v2.value0);
               };
-              throw new Error("Failed pattern match at Data.Either line 224, column 1 - line 224, column 26: " + [ v.constructor.name, v1.constructor.name, v2.constructor.name ]);
+              throw new Error("Failed pattern match at Data.Either line 230, column 1 - line 230, column 26: " + [ v.constructor.name, v1.constructor.name, v2.constructor.name ]);
           };
       };
   };
@@ -2408,7 +1330,7 @@ var PS = {};
               if (v2 instanceof Right) {
                   return new Right(v1(v2.value0));
               };
-              throw new Error("Failed pattern match at Data.Either line 42, column 3 - line 42, column 34: " + [ v.constructor.name, v1.constructor.name, v2.constructor.name ]);
+              throw new Error("Failed pattern match at Data.Either line 44, column 3 - line 44, column 34: " + [ v.constructor.name, v1.constructor.name, v2.constructor.name ]);
           };
       };
   });
@@ -2422,7 +1344,7 @@ var PS = {};
           if (v instanceof Right) {
               return Data_Functor.map(functorEither)(v.value0)(v1);
           };
-          throw new Error("Failed pattern match at Data.Either line 78, column 3 - line 78, column 28: " + [ v.constructor.name, v1.constructor.name ]);
+          throw new Error("Failed pattern match at Data.Either line 80, column 3 - line 80, column 28: " + [ v.constructor.name, v1.constructor.name ]);
       };
   });
   var bindEither = new Control_Bind.Bind(function () {
@@ -2451,30 +1373,6 @@ var PS = {};
 (function(exports) {
     "use strict";
 
-  // module Unsafe.Coerce
-
-  exports.unsafeCoerce = function (x) {
-    return x;
-  };
-})(PS["Unsafe.Coerce"] = PS["Unsafe.Coerce"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var $foreign = PS["Unsafe.Coerce"];
-  exports["unsafeCoerce"] = $foreign.unsafeCoerce;
-})(PS["Unsafe.Coerce"] = PS["Unsafe.Coerce"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Unsafe_Coerce = PS["Unsafe.Coerce"];        
-  var runExists = Unsafe_Coerce.unsafeCoerce;
-  var mkExists = Unsafe_Coerce.unsafeCoerce;
-  exports["mkExists"] = mkExists;
-  exports["runExists"] = runExists;
-})(PS["Data.Exists"] = PS["Data.Exists"] || {});
-(function(exports) {
-    "use strict";
-
   exports.pureE = function (a) {
     return function () {
       return a;
@@ -2488,9 +1386,23 @@ var PS = {};
       };
     };
   };
+
+  exports.runPure = function (f) {
+    return f();
+  };
+
+  exports.foreachE = function (as) {
+    return function (f) {
+      return function () {
+        for (var i = 0, l = as.length; i < l; i++) {
+          f(as[i])();
+        }
+      };
+    };
+  };
 })(PS["Control.Monad.Eff"] = PS["Control.Monad.Eff"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Control.Monad.Eff"];
   var Control_Applicative = PS["Control.Applicative"];
@@ -2519,9 +1431,42 @@ var PS = {};
   exports["applicativeEff"] = applicativeEff;
   exports["bindEff"] = bindEff;
   exports["monadEff"] = monadEff;
+  exports["foreachE"] = $foreign.foreachE;
+  exports["runPure"] = $foreign.runPure;
 })(PS["Control.Monad.Eff"] = PS["Control.Monad.Eff"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+    "use strict";
+
+  exports.unsafeCoerceEff = function (f) {
+    return f;
+  };
+})(PS["Control.Monad.Eff.Unsafe"] = PS["Control.Monad.Eff.Unsafe"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var $foreign = PS["Control.Monad.Eff.Unsafe"];
+  var Control_Monad_Eff = PS["Control.Monad.Eff"];
+  var Control_Semigroupoid = PS["Control.Semigroupoid"];
+  exports["unsafeCoerceEff"] = $foreign.unsafeCoerceEff;
+})(PS["Control.Monad.Eff.Unsafe"] = PS["Control.Monad.Eff.Unsafe"] || {});
+(function(exports) {
+    "use strict";
+
+  exports.readSTRef = function (ref) {
+    return function () {
+      return ref.value;
+    };
+  };
+})(PS["Control.Monad.ST"] = PS["Control.Monad.ST"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var $foreign = PS["Control.Monad.ST"];
+  var Control_Monad_Eff = PS["Control.Monad.Eff"];
+  exports["readSTRef"] = $foreign.readSTRef;
+})(PS["Control.Monad.ST"] = PS["Control.Monad.ST"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Alt = PS["Control.Alt"];
@@ -2591,23 +1536,7 @@ var PS = {};
   exports["monadIdentity"] = monadIdentity;
 })(PS["Data.Identity"] = PS["Data.Identity"] || {});
 (function(exports) {
-    "use strict";
-
-  // module Partial.Unsafe
-
-  exports.unsafePartial = function (f) {
-    return f();
-  };
-})(PS["Partial.Unsafe"] = PS["Partial.Unsafe"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var $foreign = PS["Partial.Unsafe"];
-  var Partial = PS["Partial"];
-  exports["unsafePartial"] = $foreign.unsafePartial;
-})(PS["Partial.Unsafe"] = PS["Partial.Unsafe"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Monad_Eff = PS["Control.Monad.Eff"];
@@ -2646,22 +1575,62 @@ var PS = {};
   };
   var tailRecM = function (dict) {
       return dict.tailRecM;
-  }; 
-  var forever = function (dictMonadRec) {
-      return function (ma) {
-          return tailRecM(dictMonadRec)(function (u) {
-              return Data_Functor.voidRight((((dictMonadRec["__superclass_Control.Monad.Monad_0"]())["__superclass_Control.Bind.Bind_1"]())["__superclass_Control.Apply.Apply_0"]())["__superclass_Data.Functor.Functor_0"]())(new Loop(u))(ma);
-          })(Data_Unit.unit);
-      };
   };
+  var tailRecEff = function (f) {
+      return function (a) {
+          var fromDone = function (v) {
+              var __unused = function (dictPartial1) {
+                  return function ($dollar16) {
+                      return $dollar16;
+                  };
+              };
+              return __unused()((function () {
+                  if (v instanceof Done) {
+                      return v.value0;
+                  };
+                  throw new Error("Failed pattern match at Control.Monad.Rec.Class line 130, column 28 - line 130, column 42: " + [ v.constructor.name ]);
+              })());
+          };
+          var f$prime = function ($49) {
+              return Control_Monad_Eff_Unsafe.unsafeCoerceEff(f($49));
+          };
+          return function __do() {
+              var v = f$prime(a)();
+              var v1 = {
+                  value: v
+              };
+              (function () {
+                  while (!(function __do() {
+                      var v2 = v1.value;
+                      if (v2 instanceof Loop) {
+                          var v3 = f$prime(v2.value0)();
+                          var v4 = v1.value = v3;
+                          return false;
+                      };
+                      if (v2 instanceof Done) {
+                          return true;
+                      };
+                      throw new Error("Failed pattern match at Control.Monad.Rec.Class line 119, column 5 - line 124, column 26: " + [ v2.constructor.name ]);
+                  })()) {
+
+                  };
+                  return {};
+              })();
+              return Data_Functor.map(Control_Monad_Eff.functorEff)(fromDone)(Control_Monad_ST.readSTRef(v1))();
+          };
+      };
+  }; 
+  var monadRecEff = new MonadRec(function () {
+      return Control_Monad_Eff.monadEff;
+  }, tailRecEff);
   exports["Loop"] = Loop;
   exports["Done"] = Done;
   exports["MonadRec"] = MonadRec;
-  exports["forever"] = forever;
   exports["tailRecM"] = tailRecM;
+  exports["monadRecEff"] = monadRecEff;
 })(PS["Control.Monad.Rec.Class"] = PS["Control.Monad.Rec.Class"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];        
   var MonadTrans = function (lift) {
@@ -2674,21 +1643,23 @@ var PS = {};
   exports["lift"] = lift;
 })(PS["Control.Monad.Trans.Class"] = PS["Control.Monad.Trans.Class"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Data_Bifunctor = PS["Data.Bifunctor"];
   var Data_Either = PS["Data.Either"];
   var Data_Exists = PS["Data.Exists"];
+  var Data_Monoid = PS["Data.Monoid"];
+  var Control_Apply = PS["Control.Apply"];
   var Control_Monad_Rec_Class = PS["Control.Monad.Rec.Class"];
   var Control_Monad_Trans_Class = PS["Control.Monad.Trans.Class"];
   var Data_Functor = PS["Data.Functor"];
   var Data_Unit = PS["Data.Unit"];
   var Control_Semigroupoid = PS["Control.Semigroupoid"];
-  var Control_Apply = PS["Control.Apply"];
   var Control_Monad = PS["Control.Monad"];
   var Control_Applicative = PS["Control.Applicative"];
   var Control_Bind = PS["Control.Bind"];
+  var Data_Semigroup = PS["Data.Semigroup"];
   var Control_Category = PS["Control.Category"];        
   var Bound = (function () {
       function Bound(value0, value1) {
@@ -2746,46 +1717,14 @@ var PS = {};
                   };
                   if (v instanceof Bind) {
                       return Data_Exists.runExists(function (v1) {
-                          return bound(v1.value0)(function ($94) {
-                              return Data_Functor.map(functorFreeT(dictFunctor)(dictFunctor1))(f)(v1.value1($94));
+                          return bound(v1.value0)(function ($100) {
+                              return Data_Functor.map(functorFreeT(dictFunctor)(dictFunctor1))(f)(v1.value1($100));
                           });
                       })(v.value0);
                   };
-                  throw new Error("Failed pattern match at Control.Monad.Free.Trans line 53, column 3 - line 53, column 69: " + [ f.constructor.name, v.constructor.name ]);
+                  throw new Error("Failed pattern match at Control.Monad.Free.Trans line 55, column 3 - line 55, column 69: " + [ f.constructor.name, v.constructor.name ]);
               };
           });
-      };
-  };
-  var bimapFreeT = function (dictFunctor) {
-      return function (dictFunctor1) {
-          return function (nf) {
-              return function (nm) {
-                  return function (v) {
-                      if (v instanceof Bind) {
-                          return Data_Exists.runExists(function (v1) {
-                              return bound(function ($95) {
-                                  return bimapFreeT(dictFunctor)(dictFunctor1)(nf)(nm)(v1.value0($95));
-                              })(function ($96) {
-                                  return bimapFreeT(dictFunctor)(dictFunctor1)(nf)(nm)(v1.value1($96));
-                              });
-                          })(v.value0);
-                      };
-                      if (v instanceof FreeT) {
-                          return new FreeT(function (v1) {
-                              return Data_Functor.map(dictFunctor1)(Data_Functor.map(Data_Either.functorEither)(function ($97) {
-                                  return nf(Data_Functor.map(dictFunctor)(bimapFreeT(dictFunctor)(dictFunctor1)(nf)(nm))($97));
-                              }))(nm(v.value0(Data_Unit.unit)));
-                          });
-                      };
-                      throw new Error("Failed pattern match at Control.Monad.Free.Trans line 93, column 1 - line 93, column 114: " + [ nf.constructor.name, nm.constructor.name, v.constructor.name ]);
-                  };
-              };
-          };
-      };
-  };
-  var hoistFreeT = function (dictFunctor) {
-      return function (dictFunctor1) {
-          return bimapFreeT(dictFunctor)(dictFunctor1)(Control_Category.id(Control_Category.categoryFn));
       };
   };
   var monadFreeT = function (dictFunctor) {
@@ -2854,9 +1793,9 @@ var PS = {};
               };
               if (v instanceof Bind) {
                   return Data_Exists.runExists(function (v1) {
-                      var $76 = v1.value0(Data_Unit.unit);
-                      if ($76 instanceof FreeT) {
-                          return Control_Bind.bind((dictMonadRec["__superclass_Control.Monad.Monad_0"]())["__superclass_Control.Bind.Bind_1"]())($76.value0(Data_Unit.unit))(function (v2) {
+                      var $82 = v1.value0(Data_Unit.unit);
+                      if ($82 instanceof FreeT) {
+                          return Control_Bind.bind((dictMonadRec["__superclass_Control.Monad.Monad_0"]())["__superclass_Control.Bind.Bind_1"]())($82.value0(Data_Unit.unit))(function (v2) {
                               if (v2 instanceof Data_Either.Left) {
                                   return Control_Applicative.pure((dictMonadRec["__superclass_Control.Monad.Monad_0"]())["__superclass_Control.Applicative.Applicative_0"]())(new Control_Monad_Rec_Class.Loop(v1.value1(v2.value0)));
                               };
@@ -2865,20 +1804,20 @@ var PS = {};
                                       return Control_Bind.bind(bindFreeT(dictFunctor)(dictMonadRec["__superclass_Control.Monad.Monad_0"]()))(h)(v1.value1);
                                   })(v2.value0))));
                               };
-                              throw new Error("Failed pattern match at Control.Monad.Free.Trans line 47, column 20 - line 49, column 67: " + [ v2.constructor.name ]);
+                              throw new Error("Failed pattern match at Control.Monad.Free.Trans line 49, column 20 - line 51, column 67: " + [ v2.constructor.name ]);
                           });
                       };
-                      if ($76 instanceof Bind) {
+                      if ($82 instanceof Bind) {
                           return Data_Exists.runExists(function (v2) {
                               return Control_Applicative.pure((dictMonadRec["__superclass_Control.Monad.Monad_0"]())["__superclass_Control.Applicative.Applicative_0"]())(new Control_Monad_Rec_Class.Loop(Control_Bind.bind(bindFreeT(dictFunctor)(dictMonadRec["__superclass_Control.Monad.Monad_0"]()))(v2.value0(Data_Unit.unit))(function (z) {
                                   return Control_Bind.bind(bindFreeT(dictFunctor)(dictMonadRec["__superclass_Control.Monad.Monad_0"]()))(v2.value1(z))(v1.value1);
                               })));
-                          })($76.value0);
+                          })($82.value0);
                       };
-                      throw new Error("Failed pattern match at Control.Monad.Free.Trans line 45, column 5 - line 50, column 98: " + [ $76.constructor.name ]);
+                      throw new Error("Failed pattern match at Control.Monad.Free.Trans line 47, column 5 - line 52, column 98: " + [ $82.constructor.name ]);
                   })(v.value0);
               };
-              throw new Error("Failed pattern match at Control.Monad.Free.Trans line 43, column 3 - line 43, column 35: " + [ v.constructor.name ]);
+              throw new Error("Failed pattern match at Control.Monad.Free.Trans line 45, column 3 - line 45, column 35: " + [ v.constructor.name ]);
           };
           return Control_Monad_Rec_Class.tailRecM(dictMonadRec)(go);
       };
@@ -2893,7 +1832,7 @@ var PS = {};
                   if (v instanceof Data_Either.Right) {
                       return Data_Functor.map((((dictMonadRec["__superclass_Control.Monad.Monad_0"]())["__superclass_Control.Bind.Bind_1"]())["__superclass_Control.Apply.Apply_0"]())["__superclass_Data.Functor.Functor_0"]())(Control_Monad_Rec_Class.Loop.create)(interp(v.value0));
                   };
-                  throw new Error("Failed pattern match at Control.Monad.Free.Trans line 101, column 3 - line 101, column 30: " + [ v.constructor.name ]);
+                  throw new Error("Failed pattern match at Control.Monad.Free.Trans line 109, column 3 - line 109, column 30: " + [ v.constructor.name ]);
               };
               return Control_Monad_Rec_Class.tailRecM(dictMonadRec)(Control_Bind.composeKleisliFlipped((dictMonadRec["__superclass_Control.Monad.Monad_0"]())["__superclass_Control.Bind.Bind_1"]())(go)(resume(dictFunctor)(dictMonadRec)));
           };
@@ -2912,16 +1851,14 @@ var PS = {};
                       if (v instanceof Control_Monad_Rec_Class.Done) {
                           return Control_Applicative.pure(applicativeFreeT(dictFunctor)(dictMonad))(v.value0);
                       };
-                      throw new Error("Failed pattern match at Control.Monad.Free.Trans line 75, column 15 - line 77, column 25: " + [ v.constructor.name ]);
+                      throw new Error("Failed pattern match at Control.Monad.Free.Trans line 77, column 15 - line 79, column 25: " + [ v.constructor.name ]);
                   });
               };
               return go;
           });
       };
   };
-  exports["bimapFreeT"] = bimapFreeT;
   exports["freeT"] = freeT;
-  exports["hoistFreeT"] = hoistFreeT;
   exports["liftFreeT"] = liftFreeT;
   exports["resume"] = resume;
   exports["runFreeT"] = runFreeT;
@@ -2934,7 +1871,7 @@ var PS = {};
   exports["monadRecFreeT"] = monadRecFreeT;
 })(PS["Control.Monad.Free.Trans"] = PS["Control.Monad.Free.Trans"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Data_Maybe = PS["Data.Maybe"];
@@ -2957,7 +1894,7 @@ var PS = {};
   exports["throwError"] = throwError;
 })(PS["Control.Monad.Error.Class"] = PS["Control.Monad.Error.Class"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Control_Category = PS["Control.Category"];
   var Control_Monad = PS["Control.Monad"];
@@ -2977,7 +1914,7 @@ var PS = {};
   exports["monadEffEff"] = monadEffEff;
 })(PS["Control.Monad.Eff.Class"] = PS["Control.Monad.Eff.Class"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Data_Unit = PS["Data.Unit"];        
   var Lazy = function (defer) {
@@ -2990,7 +1927,7 @@ var PS = {};
   exports["defer"] = defer;
 })(PS["Control.Lazy"] = PS["Control.Lazy"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Biapplicative = PS["Control.Biapplicative"];
@@ -3001,6 +1938,7 @@ var PS = {};
   var Data_Bifoldable = PS["Data.Bifoldable"];
   var Data_Bifunctor = PS["Data.Bifunctor"];
   var Data_Bitraversable = PS["Data.Bitraversable"];
+  var Data_Eq = PS["Data.Eq"];
   var Data_Foldable = PS["Data.Foldable"];
   var Data_Functor_Invariant = PS["Data.Functor.Invariant"];
   var Data_HeytingAlgebra = PS["Data.HeytingAlgebra"];
@@ -3008,11 +1946,10 @@ var PS = {};
   var Data_Maybe_First = PS["Data.Maybe.First"];
   var Data_Monoid = PS["Data.Monoid"];
   var Data_Newtype = PS["Data.Newtype"];
+  var Data_Ord = PS["Data.Ord"];
   var Data_Traversable = PS["Data.Traversable"];
   var Data_Show = PS["Data.Show"];
   var Data_Semigroup = PS["Data.Semigroup"];
-  var Data_Eq = PS["Data.Eq"];
-  var Data_Ord = PS["Data.Ord"];
   var Data_Ordering = PS["Data.Ordering"];
   var Data_Bounded = PS["Data.Bounded"];
   var Control_Semigroupoid = PS["Control.Semigroupoid"];
@@ -3038,15 +1975,25 @@ var PS = {};
           };
       };
       return Tuple;
-  })();                                                                                                 
+  })();
+  var snd = function (v) {
+      return v.value1;
+  };
+  var functorTuple = new Data_Functor.Functor(function (f) {
+      return function (v) {
+          return new Tuple(v.value0, f(v.value1));
+      };
+  });                                                                                                   
   var fst = function (v) {
       return v.value0;
   };
   exports["Tuple"] = Tuple;
   exports["fst"] = fst;
+  exports["snd"] = snd;
+  exports["functorTuple"] = functorTuple;
 })(PS["Data.Tuple"] = PS["Data.Tuple"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Data_Tuple = PS["Data.Tuple"];
@@ -3072,19 +2019,13 @@ var PS = {};
           });
       };
   };
-  var get = function (dictMonadState) {
-      return state(dictMonadState)(function (s) {
-          return new Data_Tuple.Tuple(s, s);
-      });
-  };
   exports["MonadState"] = MonadState;
-  exports["get"] = get;
   exports["gets"] = gets;
   exports["modify"] = modify;
   exports["state"] = state;
 })(PS["Control.Monad.State.Class"] = PS["Control.Monad.State.Class"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Alt = PS["Control.Alt"];
@@ -3211,7 +2152,7 @@ var PS = {};
   exports["monadStateExceptT"] = monadStateExceptT;
 })(PS["Control.Monad.Except.Trans"] = PS["Control.Monad.Except.Trans"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Monad_Error_Class = PS["Control.Monad.Error.Class"];
@@ -3232,7 +2173,7 @@ var PS = {};
   exports["runExcept"] = runExcept;
 })(PS["Control.Monad.Except"] = PS["Control.Monad.Except"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Data_Newtype = PS["Data.Newtype"];
@@ -3264,221 +2205,64 @@ var PS = {};
   exports["profunctorFn"] = profunctorFn;
 })(PS["Data.Profunctor"] = PS["Data.Profunctor"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Control_Alt = PS["Control.Alt"];
-  var Control_Alternative = PS["Control.Alternative"];
-  var Control_Monad_Cont_Class = PS["Control.Monad.Cont.Class"];
-  var Control_Monad_Eff_Class = PS["Control.Monad.Eff.Class"];
-  var Control_Monad_Error_Class = PS["Control.Monad.Error.Class"];
-  var Control_Monad_Reader_Class = PS["Control.Monad.Reader.Class"];
-  var Control_Monad_Rec_Class = PS["Control.Monad.Rec.Class"];
-  var Control_Monad_State_Class = PS["Control.Monad.State.Class"];
-  var Control_Monad_Trans_Class = PS["Control.Monad.Trans.Class"];
-  var Control_Monad_Writer_Class = PS["Control.Monad.Writer.Class"];
-  var Control_MonadPlus = PS["Control.MonadPlus"];
-  var Control_MonadZero = PS["Control.MonadZero"];
-  var Control_Plus = PS["Control.Plus"];
-  var Data_Maybe = PS["Data.Maybe"];
-  var Data_Newtype = PS["Data.Newtype"];
-  var Data_Tuple = PS["Data.Tuple"];
-  var Data_Functor = PS["Data.Functor"];
-  var Control_Apply = PS["Control.Apply"];
-  var Control_Monad = PS["Control.Monad"];
-  var Control_Applicative = PS["Control.Applicative"];
-  var Control_Semigroupoid = PS["Control.Semigroupoid"];
-  var Control_Bind = PS["Control.Bind"];
-  var Data_Function = PS["Data.Function"];
-  var Control_Category = PS["Control.Category"];        
-  var MaybeT = function (x) {
-      return x;
+    "use strict";
+
+  exports.newRef = function (val) {
+    return function () {
+      return { value: val };
+    };
   };
-  var runMaybeT = function (v) {
-      return v;
+
+  exports.readRef = function (ref) {
+    return function () {
+      return ref.value;
+    };
   };
-  var functorMaybeT = function (dictFunctor) {
-      return new Data_Functor.Functor(function (f) {
-          return function (v) {
-              return Data_Functor.map(dictFunctor)(Data_Functor.map(Data_Maybe.functorMaybe)(f))(v);
-          };
-      });
-  };
-  var monadMaybeT = function (dictMonad) {
-      return new Control_Monad.Monad(function () {
-          return applicativeMaybeT(dictMonad);
-      }, function () {
-          return bindMaybeT(dictMonad);
-      });
-  };
-  var bindMaybeT = function (dictMonad) {
-      return new Control_Bind.Bind(function () {
-          return applyMaybeT(dictMonad);
-      }, function (v) {
-          return function (f) {
-              return Control_Bind.bind(dictMonad["__superclass_Control.Bind.Bind_1"]())(v)(function (v1) {
-                  if (v1 instanceof Data_Maybe.Nothing) {
-                      return Control_Applicative.pure(dictMonad["__superclass_Control.Applicative.Applicative_0"]())(Data_Maybe.Nothing.value);
-                  };
-                  if (v1 instanceof Data_Maybe.Just) {
-                      var $42 = f(v1.value0);
-                      return $42;
-                  };
-                  throw new Error("Failed pattern match at Control.Monad.Maybe.Trans line 55, column 11 - line 57, column 42: " + [ v1.constructor.name ]);
-              });
-          };
-      });
-  };
-  var applyMaybeT = function (dictMonad) {
-      return new Control_Apply.Apply(function () {
-          return functorMaybeT(((dictMonad["__superclass_Control.Bind.Bind_1"]())["__superclass_Control.Apply.Apply_0"]())["__superclass_Data.Functor.Functor_0"]());
-      }, Control_Monad.ap(monadMaybeT(dictMonad)));
-  };
-  var applicativeMaybeT = function (dictMonad) {
-      return new Control_Applicative.Applicative(function () {
-          return applyMaybeT(dictMonad);
-      }, function ($67) {
-          return MaybeT(Control_Applicative.pure(dictMonad["__superclass_Control.Applicative.Applicative_0"]())(Data_Maybe.Just.create($67)));
-      });
-  };
-  var monadRecMaybeT = function (dictMonadRec) {
-      return new Control_Monad_Rec_Class.MonadRec(function () {
-          return monadMaybeT(dictMonadRec["__superclass_Control.Monad.Monad_0"]());
-      }, function (f) {
-          return function ($69) {
-              return MaybeT(Control_Monad_Rec_Class.tailRecM(dictMonadRec)(function (a) {
-                  return Control_Bind.bind((dictMonadRec["__superclass_Control.Monad.Monad_0"]())["__superclass_Control.Bind.Bind_1"]())((function () {
-                      var $48 = f(a);
-                      return $48;
-                  })())(function (m$prime) {
-                      return Control_Applicative.pure((dictMonadRec["__superclass_Control.Monad.Monad_0"]())["__superclass_Control.Applicative.Applicative_0"]())((function () {
-                          if (m$prime instanceof Data_Maybe.Nothing) {
-                              return new Control_Monad_Rec_Class.Done(Data_Maybe.Nothing.value);
-                          };
-                          if (m$prime instanceof Data_Maybe.Just && m$prime.value0 instanceof Control_Monad_Rec_Class.Loop) {
-                              return new Control_Monad_Rec_Class.Loop(m$prime.value0.value0);
-                          };
-                          if (m$prime instanceof Data_Maybe.Just && m$prime.value0 instanceof Control_Monad_Rec_Class.Done) {
-                              return new Control_Monad_Rec_Class.Done(new Data_Maybe.Just(m$prime.value0.value0));
-                          };
-                          throw new Error("Failed pattern match at Control.Monad.Maybe.Trans line 85, column 16 - line 88, column 43: " + [ m$prime.constructor.name ]);
-                      })());
-                  });
-              })($69));
-          };
-      });
-  };
-  var altMaybeT = function (dictMonad) {
-      return new Control_Alt.Alt(function () {
-          return functorMaybeT(((dictMonad["__superclass_Control.Bind.Bind_1"]())["__superclass_Control.Apply.Apply_0"]())["__superclass_Data.Functor.Functor_0"]());
-      }, function (v) {
-          return function (v1) {
-              return Control_Bind.bind(dictMonad["__superclass_Control.Bind.Bind_1"]())(v)(function (v2) {
-                  if (v2 instanceof Data_Maybe.Nothing) {
-                      return v1;
-                  };
-                  return Control_Applicative.pure(dictMonad["__superclass_Control.Applicative.Applicative_0"]())(v2);
-              });
-          };
-      });
-  };
-  var plusMaybeT = function (dictMonad) {
-      return new Control_Plus.Plus(function () {
-          return altMaybeT(dictMonad);
-      }, Control_Applicative.pure(dictMonad["__superclass_Control.Applicative.Applicative_0"]())(Data_Maybe.Nothing.value));
-  };
-  exports["MaybeT"] = MaybeT;
-  exports["runMaybeT"] = runMaybeT;
-  exports["functorMaybeT"] = functorMaybeT;
-  exports["applyMaybeT"] = applyMaybeT;
-  exports["applicativeMaybeT"] = applicativeMaybeT;
-  exports["bindMaybeT"] = bindMaybeT;
-  exports["monadMaybeT"] = monadMaybeT;
-  exports["altMaybeT"] = altMaybeT;
-  exports["plusMaybeT"] = plusMaybeT;
-  exports["monadRecMaybeT"] = monadRecMaybeT;
-})(PS["Control.Monad.Maybe.Trans"] = PS["Control.Monad.Maybe.Trans"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Control_Alt = PS["Control.Alt"];
-  var Control_Alternative = PS["Control.Alternative"];
-  var Control_Monad_Cont_Class = PS["Control.Monad.Cont.Class"];
-  var Control_Monad_Eff_Class = PS["Control.Monad.Eff.Class"];
-  var Control_Monad_Error_Class = PS["Control.Monad.Error.Class"];
-  var Control_Monad_Reader_Class = PS["Control.Monad.Reader.Class"];
-  var Control_Monad_Rec_Class = PS["Control.Monad.Rec.Class"];
-  var Control_Monad_State_Class = PS["Control.Monad.State.Class"];
-  var Control_Monad_Trans_Class = PS["Control.Monad.Trans.Class"];
-  var Control_Monad_Writer_Class = PS["Control.Monad.Writer.Class"];
-  var Control_MonadPlus = PS["Control.MonadPlus"];
-  var Control_MonadZero = PS["Control.MonadZero"];
-  var Control_Plus = PS["Control.Plus"];
-  var Data_Monoid = PS["Data.Monoid"];
-  var Data_Newtype = PS["Data.Newtype"];
-  var Data_Tuple = PS["Data.Tuple"];
-  var Data_Functor = PS["Data.Functor"];
-  var Data_Function = PS["Data.Function"];
-  var Control_Apply = PS["Control.Apply"];
-  var Data_Semigroup = PS["Data.Semigroup"];
-  var Control_Applicative = PS["Control.Applicative"];
-  var Control_Bind = PS["Control.Bind"];
-  var Control_Monad = PS["Control.Monad"];
-  var Control_Semigroupoid = PS["Control.Semigroupoid"];
-  var Data_Unit = PS["Data.Unit"];        
-  var WriterT = function (x) {
-      return x;
-  };
-  var runWriterT = function (v) {
-      return v;
-  };
-  var mapWriterT = function (f) {
-      return function (v) {
-          return f(v);
+
+  exports["modifyRef'"] = function (ref) {
+    return function (f) {
+      return function () {
+        var t = f(ref.value);
+        ref.value = t.state;
+        return t.value;
       };
+    };
   };
-  var functorWriterT = function (dictFunctor) {
-      return new Data_Functor.Functor(function (f) {
-          return mapWriterT(Data_Functor.map(dictFunctor)(function (v) {
-              return new Data_Tuple.Tuple(f(v.value0), v.value1);
-          }));
-      });
+
+  exports.writeRef = function (ref) {
+    return function (val) {
+      return function () {
+        ref.value = val;
+        return {};
+      };
+    };
   };
-  var applyWriterT = function (dictSemigroup) {
-      return function (dictApply) {
-          return new Control_Apply.Apply(function () {
-              return functorWriterT(dictApply["__superclass_Data.Functor.Functor_0"]());
-          }, function (v) {
-              return function (v1) {
-                  var k = function (v3) {
-                      return function (v4) {
-                          return new Data_Tuple.Tuple(v3.value0(v4.value0), Data_Semigroup.append(dictSemigroup)(v3.value1)(v4.value1));
-                      };
-                  };
-                  return Control_Apply.apply(dictApply)(Data_Functor.map(dictApply["__superclass_Data.Functor.Functor_0"]())(k)(v))(v1);
+})(PS["Control.Monad.Eff.Ref"] = PS["Control.Monad.Eff.Ref"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var $foreign = PS["Control.Monad.Eff.Ref"];
+  var Prelude = PS["Prelude"];
+  var Control_Monad_Eff = PS["Control.Monad.Eff"];
+  var Data_Unit = PS["Data.Unit"];        
+  var modifyRef = function (ref) {
+      return function (f) {
+          return $foreign["modifyRef'"](ref)(function (s) {
+              return {
+                  state: f(s), 
+                  value: Data_Unit.unit
               };
           });
       };
   };
-  var applicativeWriterT = function (dictMonoid) {
-      return function (dictApplicative) {
-          return new Control_Applicative.Applicative(function () {
-              return applyWriterT(dictMonoid["__superclass_Data.Semigroup.Semigroup_0"]())(dictApplicative["__superclass_Control.Apply.Apply_0"]());
-          }, function (a) {
-              return WriterT(Control_Applicative.pure(dictApplicative)(new Data_Tuple.Tuple(a, Data_Monoid.mempty(dictMonoid))));
-          });
-      };
-  };
-  exports["WriterT"] = WriterT;
-  exports["mapWriterT"] = mapWriterT;
-  exports["runWriterT"] = runWriterT;
-  exports["functorWriterT"] = functorWriterT;
-  exports["applyWriterT"] = applyWriterT;
-  exports["applicativeWriterT"] = applicativeWriterT;
-})(PS["Control.Monad.Writer.Trans"] = PS["Control.Monad.Writer.Trans"] || {});
+  exports["modifyRef"] = modifyRef;
+  exports["modifyRef'"] = $foreign["modifyRef'"];
+  exports["newRef"] = $foreign.newRef;
+  exports["readRef"] = $foreign.readRef;
+  exports["writeRef"] = $foreign.writeRef;
+})(PS["Control.Monad.Eff.Ref"] = PS["Control.Monad.Eff.Ref"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Alt = PS["Control.Alt"];
@@ -3522,7 +2306,7 @@ var PS = {};
   exports["sequential"] = sequential;
 })(PS["Control.Parallel.Class"] = PS["Control.Parallel.Class"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Apply = PS["Control.Apply"];
@@ -3547,6 +2331,23 @@ var PS = {};
   var Data_Function = PS["Data.Function"];
   var Control_Parallel_Class = PS["Control.Parallel.Class"];
   var Control_Category = PS["Control.Category"];
+  var Emit = (function () {
+      function Emit(value0, value1) {
+          this.value0 = value0;
+          this.value1 = value1;
+      };
+      Emit.create = function (value0) {
+          return function (value1) {
+              return new Emit(value0, value1);
+          };
+      };
+      return Emit;
+  })();
+  var runProcess = function (dictMonadRec) {
+      return Control_Monad_Free_Trans.runFreeT(Data_Identity.functorIdentity)(dictMonadRec)(function ($185) {
+          return Control_Applicative.pure((dictMonadRec["__superclass_Control.Monad.Monad_0"]())["__superclass_Control.Applicative.Applicative_0"]())(Data_Newtype.unwrap(Data_Identity.newtypeIdentity)($185));
+      });
+  };
   var profunctorAwait = new Data_Profunctor.Profunctor(function (f) {
       return function (g) {
           return function (v) {
@@ -3554,6 +2355,43 @@ var PS = {};
           };
       };
   });
+  var loop = function (dictFunctor) {
+      return function (dictMonad) {
+          return function (me) {
+              return Control_Monad_Rec_Class.tailRecM(Control_Monad_Free_Trans.monadRecFreeT(dictFunctor)(dictMonad))(function (v) {
+                  return Data_Functor.map(Control_Monad_Free_Trans.functorFreeT(dictFunctor)(((dictMonad["__superclass_Control.Bind.Bind_1"]())["__superclass_Control.Apply.Apply_0"]())["__superclass_Data.Functor.Functor_0"]()))(Data_Maybe.maybe(new Control_Monad_Rec_Class.Loop(Data_Unit.unit))(Control_Monad_Rec_Class.Done.create))(me);
+              })(Data_Unit.unit);
+          };
+      };
+  };
+  var fuseWithL = function (dictFunctor) {
+      return function (dictFunctor1) {
+          return function (dictFunctor2) {
+              return function (dictMonadRec) {
+                  return function (zap) {
+                      return function (fs) {
+                          return function (gs) {
+                              var go = function (v) {
+                                  return Control_Monad_Except_Trans.runExceptT(Control_Bind.bind(Control_Monad_Except_Trans.bindExceptT(dictMonadRec["__superclass_Control.Monad.Monad_0"]()))(Control_Monad_Except_Trans.ExceptT(Control_Monad_Free_Trans.resume(dictFunctor)(dictMonadRec)(v.value0)))(function (v1) {
+                                      return Control_Bind.bind(Control_Monad_Except_Trans.bindExceptT(dictMonadRec["__superclass_Control.Monad.Monad_0"]()))(Control_Monad_Except_Trans.ExceptT(Control_Monad_Free_Trans.resume(dictFunctor1)(dictMonadRec)(v.value1)))(function (v2) {
+                                          return Control_Applicative.pure(Control_Monad_Except_Trans.applicativeExceptT(dictMonadRec["__superclass_Control.Monad.Monad_0"]()))(Data_Functor.map(dictFunctor2)(function (t) {
+                                              return Control_Monad_Free_Trans.freeT(function (v3) {
+                                                  return go(t);
+                                              });
+                                          })(zap(Data_Tuple.Tuple.create)(v1)(v2)));
+                                      });
+                                  }));
+                              };
+                              return Control_Monad_Free_Trans.freeT(function (v) {
+                                  return go(new Data_Tuple.Tuple(fs, gs));
+                              });
+                          };
+                      };
+                  };
+              };
+          };
+      };
+  };
   var fuseWith = function (dictFunctor) {
       return function (dictFunctor1) {
           return function (dictFunctor2) {
@@ -3589,104 +2427,70 @@ var PS = {};
       };
   };
   var functorAwait = new Data_Functor.Functor(Data_Profunctor.rmap(profunctorAwait));
-  var $$await = function (dictMonad) {
-      return Control_Monad_Free_Trans.liftFreeT(functorAwait)(dictMonad)(Control_Category.id(Control_Category.categoryFn));
-  };
-  exports["await"] = $$await;
-  exports["fuseWith"] = fuseWith;
-  exports["profunctorAwait"] = profunctorAwait;
-  exports["functorAwait"] = functorAwait;
-})(PS["Control.Coroutine"] = PS["Control.Coroutine"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Control_Coroutine = PS["Control.Coroutine"];
-  var Control_Monad_Free_Trans = PS["Control.Monad.Free.Trans"];
-  var Control_Monad_Maybe_Trans = PS["Control.Monad.Maybe.Trans"];
-  var Control_Monad_Rec_Class = PS["Control.Monad.Rec.Class"];
-  var Control_Monad_Trans_Class = PS["Control.Monad.Trans.Class"];
-  var Control_Parallel = PS["Control.Parallel"];
-  var Control_Plus = PS["Control.Plus"];
-  var Data_Bifunctor = PS["Data.Bifunctor"];
-  var Data_Either = PS["Data.Either"];
-  var Data_Maybe = PS["Data.Maybe"];
-  var Data_Newtype = PS["Data.Newtype"];
-  var Data_Functor = PS["Data.Functor"];
-  var Control_Semigroupoid = PS["Control.Semigroupoid"];
-  var Control_Applicative = PS["Control.Applicative"];
-  var Data_Identity = PS["Data.Identity"];
-  var Data_Function = PS["Data.Function"];
-  var Data_Unit = PS["Data.Unit"];
-  var Control_Bind = PS["Control.Bind"];        
-  var Emit = (function () {
-      function Emit(value0, value1) {
-          this.value0 = value0;
-          this.value1 = value1;
-      };
-      Emit.create = function (value0) {
-          return function (value1) {
-              return new Emit(value0, value1);
-          };
-      };
-      return Emit;
-  })();
-  var Stall = (function () {
-      function Stall(value0) {
-          this.value0 = value0;
-      };
-      Stall.create = function (value0) {
-          return new Stall(value0);
-      };
-      return Stall;
-  })();
-  var runStallingProcess = function (dictMonadRec) {
-      return function ($31) {
-          return Control_Monad_Maybe_Trans.runMaybeT(Control_Monad_Free_Trans.runFreeT(Data_Maybe.functorMaybe)(Control_Monad_Maybe_Trans.monadRecMaybeT(dictMonadRec))(Data_Maybe.maybe(Control_Plus.empty(Control_Monad_Maybe_Trans.plusMaybeT(dictMonadRec["__superclass_Control.Monad.Monad_0"]())))(Control_Applicative.pure(Control_Monad_Maybe_Trans.applicativeMaybeT(dictMonadRec["__superclass_Control.Monad.Monad_0"]()))))(Control_Monad_Free_Trans.hoistFreeT(Data_Maybe.functorMaybe)(Control_Monad_Maybe_Trans.functorMaybeT((((dictMonadRec["__superclass_Control.Monad.Monad_0"]())["__superclass_Control.Bind.Bind_1"]())["__superclass_Control.Apply.Apply_0"]())["__superclass_Data.Functor.Functor_0"]()))(function ($32) {
-              return Control_Monad_Maybe_Trans.MaybeT(Data_Functor.map((((dictMonadRec["__superclass_Control.Monad.Monad_0"]())["__superclass_Control.Bind.Bind_1"]())["__superclass_Control.Apply.Apply_0"]())["__superclass_Data.Functor.Functor_0"]())(Data_Maybe.Just.create)($32));
-          })($31)));
-      };
-  };
-  var bifunctorStallF = new Data_Bifunctor.Bifunctor(function (f) {
+  var bifunctorEmit = new Data_Bifunctor.Bifunctor(function (f) {
       return function (g) {
           return function (v) {
-              if (v instanceof Emit) {
-                  return new Emit(f(v.value0), g(v.value1));
-              };
-              if (v instanceof Stall) {
-                  return new Stall(g(v.value0));
-              };
-              throw new Error("Failed pattern match at Control.Coroutine.Stalling line 51, column 15 - line 53, column 27: " + [ v.constructor.name ]);
+              return new Emit(f(v.value0), g(v.value1));
           };
       };
   });
-  var functorStallF = new Data_Functor.Functor(function (f) {
-      return Data_Bifunctor.rmap(bifunctorStallF)(f);
-  });
-  var fuse = function (dictMonadRec) {
+  var functorEmit = new Data_Functor.Functor(Data_Bifunctor.rmap(bifunctorEmit));
+  var connect = function (dictMonadRec) {
       return function (dictParallel) {
-          return Control_Coroutine.fuseWith(functorStallF)(Control_Coroutine.functorAwait)(Data_Maybe.functorMaybe)(dictMonadRec)(dictParallel)(function (f) {
-              return function (q) {
-                  return function (v) {
-                      if (q instanceof Emit) {
-                          return new Data_Maybe.Just(f(q.value1)(v(q.value0)));
-                      };
-                      if (q instanceof Stall) {
-                          return Data_Maybe.Nothing.value;
-                      };
-                      throw new Error("Failed pattern match at Control.Coroutine.Stalling line 86, column 5 - line 88, column 27: " + [ q.constructor.name ]);
+          return fuseWith(functorEmit)(functorAwait)(Data_Identity.functorIdentity)(dictMonadRec)(dictParallel)(function (f) {
+              return function (v) {
+                  return function (v1) {
+                      return f(v.value1)(v1(v.value0));
                   };
               };
           });
       };
   };
+  var emit = function (dictMonad) {
+      return function (o) {
+          return Control_Monad_Free_Trans.liftFreeT(functorEmit)(dictMonad)(new Emit(o, Data_Unit.unit));
+      };
+  };
+  var producer = function (dictMonad) {
+      return function (recv) {
+          return loop(functorEmit)(dictMonad)(Control_Bind.bind(Control_Monad_Free_Trans.bindFreeT(functorEmit)(dictMonad))(Control_Monad_Trans_Class.lift(Control_Monad_Free_Trans.monadTransFreeT(functorEmit))(dictMonad)(recv))(function (v) {
+              if (v instanceof Data_Either.Left) {
+                  return Data_Functor.voidLeft(Control_Monad_Free_Trans.functorFreeT(functorEmit)(((dictMonad["__superclass_Control.Bind.Bind_1"]())["__superclass_Control.Apply.Apply_0"]())["__superclass_Data.Functor.Functor_0"]()))(emit(dictMonad)(v.value0))(Data_Maybe.Nothing.value);
+              };
+              if (v instanceof Data_Either.Right) {
+                  return Control_Applicative.pure(Control_Monad_Free_Trans.applicativeFreeT(functorEmit)(dictMonad))(new Data_Maybe.Just(v.value0));
+              };
+              throw new Error("Failed pattern match at Control.Coroutine line 119, column 3 - line 121, column 29: " + [ v.constructor.name ]);
+          }));
+      };
+  };
+  var pullFrom = function (dictMonadRec) {
+      return fuseWithL(functorAwait)(functorEmit)(Data_Identity.functorIdentity)(dictMonadRec)(function (f) {
+          return function (v) {
+              return function (v1) {
+                  return Control_Applicative.pure(Data_Identity.applicativeIdentity)(f(v(v1.value0))(v1.value1));
+              };
+          };
+      });
+  };
+  var $$await = function (dictMonad) {
+      return Control_Monad_Free_Trans.liftFreeT(functorAwait)(dictMonad)(Control_Category.id(Control_Category.categoryFn));
+  };
   exports["Emit"] = Emit;
-  exports["Stall"] = Stall;
-  exports["fuse"] = fuse;
-  exports["runStallingProcess"] = runStallingProcess;
-  exports["bifunctorStallF"] = bifunctorStallF;
-  exports["functorStallF"] = functorStallF;
-})(PS["Control.Coroutine.Stalling"] = PS["Control.Coroutine.Stalling"] || {});
+  exports["await"] = $$await;
+  exports["connect"] = connect;
+  exports["emit"] = emit;
+  exports["fuseWith"] = fuseWith;
+  exports["fuseWithL"] = fuseWithL;
+  exports["loop"] = loop;
+  exports["producer"] = producer;
+  exports["pullFrom"] = pullFrom;
+  exports["runProcess"] = runProcess;
+  exports["bifunctorEmit"] = bifunctorEmit;
+  exports["functorEmit"] = functorEmit;
+  exports["profunctorAwait"] = profunctorAwait;
+  exports["functorAwait"] = functorAwait;
+})(PS["Control.Coroutine"] = PS["Control.Coroutine"] || {});
 (function(exports) {
   /* globals setTimeout, clearTimeout, setImmediate, clearImmediate */
   "use strict";
@@ -4019,6 +2823,19 @@ var PS = {};
     };
   };
 
+  exports._peekVar = function (nonCanceler, avar) {
+    return function (success, error) {
+      if (avar.error !== undefined) {
+        error(avar.error);
+      } else if (avar.producers.length > 0) {
+        avar.producers[0](success, error);
+      } else {
+        avar.consumers.push({ peek: true, success: success, error: error });
+      }
+      return nonCanceler;
+    };
+  };
+
   exports._putVar = function (nonCanceler, avar, a) {
     return function (success, error) {
       if (avar.error !== undefined) {
@@ -4089,7 +2906,7 @@ var PS = {};
   };
 })(PS["Control.Monad.Eff.Exception"] = PS["Control.Monad.Eff.Exception"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Control.Monad.Eff.Exception"];
   var Prelude = PS["Prelude"];
@@ -4100,29 +2917,37 @@ var PS = {};
   var Control_Semigroupoid = PS["Control.Semigroupoid"];
   var Control_Applicative = PS["Control.Applicative"];
   var Data_Functor = PS["Data.Functor"];
+  var $$throw = function ($1) {
+      return $foreign.throwException($foreign.error($1));
+  };
+  exports["throw"] = $$throw;
   exports["error"] = $foreign.error;
   exports["throwException"] = $foreign.throwException;
 })(PS["Control.Monad.Eff.Exception"] = PS["Control.Monad.Eff.Exception"] || {});
 (function(exports) {
     "use strict";
 
-  exports.runFn2 = function (fn) {
+  exports.runFn4 = function (fn) {
     return function (a) {
       return function (b) {
-        return fn(a, b);
+        return function (c) {
+          return function (d) {
+            return fn(a, b, c, d);
+          };
+        };
       };
     };
   };
 })(PS["Data.Function.Uncurried"] = PS["Data.Function.Uncurried"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Data.Function.Uncurried"];
   var Data_Unit = PS["Data.Unit"];
-  exports["runFn2"] = $foreign.runFn2;
+  exports["runFn4"] = $foreign.runFn4;
 })(PS["Data.Function.Uncurried"] = PS["Data.Function.Uncurried"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Control.Monad.Aff.Internal"];
   var Prelude = PS["Prelude"];
@@ -4130,11 +2955,12 @@ var PS = {};
   var Data_Function_Uncurried = PS["Data.Function.Uncurried"];
   exports["_killVar"] = $foreign._killVar;
   exports["_makeVar"] = $foreign._makeVar;
+  exports["_peekVar"] = $foreign._peekVar;
   exports["_putVar"] = $foreign._putVar;
   exports["_takeVar"] = $foreign._takeVar;
 })(PS["Control.Monad.Aff.Internal"] = PS["Control.Monad.Aff.Internal"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Control.Monad.Aff"];
   var Prelude = PS["Prelude"];
@@ -4190,6 +3016,9 @@ var PS = {};
   });
   var functorParAff = functorAff;
   var fromAVBox = Unsafe_Coerce.unsafeCoerce;
+  var cancel = function (v) {
+      return v;
+  };   
   var attempt = function (aff) {
       return $foreign._attempt(Data_Either.Left.create, Data_Either.Right.create, aff);
   };
@@ -4277,8 +3106,8 @@ var PS = {};
   });
   var applicativeParAff = new Control_Applicative.Applicative(function () {
       return applyParAff;
-  }, function ($53) {
-      return ParAff(Control_Applicative.pure(applicativeAff)($53));
+  }, function ($55) {
+      return ParAff(Control_Applicative.pure(applicativeAff)($55));
   });
   var monadAff = new Control_Monad.Monad(function () {
       return applicativeAff;
@@ -4321,6 +3150,7 @@ var PS = {};
   });
   exports["ParAff"] = ParAff;
   exports["attempt"] = attempt;
+  exports["cancel"] = cancel;
   exports["cancelWith"] = cancelWith;
   exports["forkAff"] = forkAff;
   exports["forkAll"] = forkAll;
@@ -4342,7 +3172,7 @@ var PS = {};
   exports["parallelParAff"] = parallelParAff;
 })(PS["Control.Monad.Aff"] = PS["Control.Monad.Aff"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Monad_Aff = PS["Control.Monad.Aff"];
@@ -4355,37 +3185,84 @@ var PS = {};
   var Control_Applicative = PS["Control.Applicative"];
   var Control_Semigroupoid = PS["Control.Semigroupoid"];        
   var fromAVBox = Unsafe_Coerce.unsafeCoerce;
+  var killVar = function (q) {
+      return function (e) {
+          return fromAVBox(Control_Monad_Aff_Internal._killVar(Control_Monad_Aff.nonCanceler, q, e));
+      };
+  };
   var makeVar = fromAVBox(Control_Monad_Aff_Internal._makeVar(Control_Monad_Aff.nonCanceler));
+  var peekVar = function (q) {
+      return fromAVBox(Control_Monad_Aff_Internal._peekVar(Control_Monad_Aff.nonCanceler, q));
+  };
   var putVar = function (q) {
       return function (a) {
           return fromAVBox(Control_Monad_Aff_Internal._putVar(Control_Monad_Aff.nonCanceler, q, a));
       };
   };
-  var makeVar$prime = function (a) {
-      return Control_Bind.bind(Control_Monad_Aff.bindAff)(makeVar)(function (v) {
-          return Control_Bind.bind(Control_Monad_Aff.bindAff)(putVar(v)(a))(function () {
-              return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(v);
-          });
-      });
-  };
   var takeVar = function (q) {
       return fromAVBox(Control_Monad_Aff_Internal._takeVar(Control_Monad_Aff.nonCanceler, q));
   };
-  var modifyVar = function (f) {
-      return function (v) {
-          return Control_Bind.bind(Control_Monad_Aff.bindAff)(takeVar(v))(function ($2) {
-              return putVar(v)(f($2));
-          });
-      };
-  };
+  exports["killVar"] = killVar;
   exports["makeVar"] = makeVar;
-  exports["makeVar'"] = makeVar$prime;
-  exports["modifyVar"] = modifyVar;
+  exports["peekVar"] = peekVar;
   exports["putVar"] = putVar;
   exports["takeVar"] = takeVar;
 })(PS["Control.Monad.Aff.AVar"] = PS["Control.Monad.Aff.AVar"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Control_Monad_Aff = PS["Control.Monad.Aff"];
+  var Unsafe_Coerce = PS["Unsafe.Coerce"];        
+  var unsafeCoerceAff = Unsafe_Coerce.unsafeCoerce;
+  exports["unsafeCoerceAff"] = unsafeCoerceAff;
+})(PS["Control.Monad.Aff.Unsafe"] = PS["Control.Monad.Aff.Unsafe"] || {});
+(function(exports) {
+    "use strict";
+
+  exports.warn = function (s) {
+    return function () {
+      console.warn(s);
+      return {};
+    };
+  };
+})(PS["Control.Monad.Eff.Console"] = PS["Control.Monad.Eff.Console"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var $foreign = PS["Control.Monad.Eff.Console"];
+  var Control_Monad_Eff = PS["Control.Monad.Eff"];
+  var Data_Show = PS["Data.Show"];
+  var Data_Unit = PS["Data.Unit"];
+  exports["warn"] = $foreign.warn;
+})(PS["Control.Monad.Eff.Console"] = PS["Control.Monad.Eff.Console"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Control_Monad_Aff = PS["Control.Monad.Aff"];
+  var Control_Monad_Eff_Exception = PS["Control.Monad.Eff.Exception"];
+  var Control_Monad_Reader_Trans = PS["Control.Monad.Reader.Trans"];
+  var Control_Monad_Trans_Class = PS["Control.Monad.Trans.Class"];
+  var Control_Semigroupoid = PS["Control.Semigroupoid"];
+  var Data_Functor = PS["Data.Functor"];        
+  var MonadFork = function (__superclass_Control$dotMonad$dotMonad_0, fork) {
+      this["__superclass_Control.Monad.Monad_0"] = __superclass_Control$dotMonad$dotMonad_0;
+      this.fork = fork;
+  };
+  var monadForkAff = new MonadFork(function () {
+      return Control_Monad_Aff.monadAff;
+  }, function ($3) {
+      return Data_Functor.map(Control_Monad_Aff.functorAff)(Control_Monad_Aff.cancel)(Control_Monad_Aff.forkAff($3));
+  });
+  var fork = function (dict) {
+      return dict.fork;
+  };
+  exports["MonadFork"] = MonadFork;
+  exports["fork"] = fork;
+  exports["monadForkAff"] = monadForkAff;
+})(PS["Control.Monad.Fork.Class"] = PS["Control.Monad.Fork.Class"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Alt = PS["Control.Alt"];
@@ -4432,7 +3309,7 @@ var PS = {};
   exports["functorNonEmpty"] = functorNonEmpty;
 })(PS["Data.NonEmpty"] = PS["Data.NonEmpty"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Alt = PS["Control.Alt"];
@@ -4488,22 +3365,11 @@ var PS = {};
   var NonEmptyList = function (x) {
       return x;
   };
-  var semigroupList = new Data_Semigroup.Semigroup(function (v) {
-      return function (ys) {
-          if (v instanceof Nil) {
-              return ys;
-          };
-          if (v instanceof Cons) {
-              return new Cons(v.value0, Data_Semigroup.append(semigroupList)(v.value1)(ys));
-          };
-          throw new Error("Failed pattern match at Data.List.Types line 53, column 3 - line 53, column 21: " + [ v.constructor.name, ys.constructor.name ]);
-      };
-  });
   var foldableList = new Data_Foldable.Foldable(function (dictMonoid) {
       return function (f) {
           return Data_Foldable.foldl(foldableList)(function (acc) {
-              return function ($133) {
-                  return Data_Semigroup.append(dictMonoid["__superclass_Data.Semigroup.Semigroup_0"]())(acc)(f($133));
+              return function ($128) {
+                  return Data_Semigroup.append(dictMonoid["__superclass_Data.Semigroup.Semigroup_0"]())(acc)(f($128));
               };
           })(Data_Monoid.mempty(dictMonoid));
       };
@@ -4523,7 +3389,7 @@ var PS = {};
                       v = __tco_v;
                       continue tco;
                   };
-                  throw new Error("Failed pattern match at Data.List.Types line 67, column 3 - line 70, column 34: " + [ b.constructor.name, v.constructor.name ]);
+                  throw new Error("Failed pattern match at Data.List.Types line 66, column 3 - line 69, column 34: " + [ b.constructor.name, v.constructor.name ]);
               };
           };
       };
@@ -4546,7 +3412,7 @@ var PS = {};
                               v = __tco_v;
                               continue tco;
                           };
-                          throw new Error("Failed pattern match at Data.List.Types line 63, column 3 - line 66, column 40: " + [ acc.constructor.name, v.constructor.name ]);
+                          throw new Error("Failed pattern match at Data.List.Types line 62, column 3 - line 65, column 40: " + [ acc.constructor.name, v.constructor.name ]);
                       };
                   };
               };
@@ -4562,6 +3428,11 @@ var PS = {};
       })(Nil.value);
   });
   var functorNonEmptyList = Data_NonEmpty.functorNonEmpty(functorList);
+  var semigroupList = new Data_Semigroup.Semigroup(function (xs) {
+      return function (ys) {
+          return Data_Foldable.foldr(foldableList)(Cons.create)(ys)(xs);
+      };
+  });
   var showList = function (dictShow) {
       return new Data_Show.Show(function (v) {
           if (v instanceof Nil) {
@@ -4580,7 +3451,7 @@ var PS = {};
           if (v instanceof Cons) {
               return Data_Semigroup.append(semigroupList)(Data_Functor.map(functorList)(v.value0)(v1))(Control_Apply.apply(applyList)(v.value1)(v1));
           };
-          throw new Error("Failed pattern match at Data.List.Types line 85, column 3 - line 85, column 20: " + [ v.constructor.name, v1.constructor.name ]);
+          throw new Error("Failed pattern match at Data.List.Types line 84, column 3 - line 84, column 20: " + [ v.constructor.name, v1.constructor.name ]);
       };
   });
   var applyNonEmptyList = new Control_Apply.Apply(function () {
@@ -4600,8 +3471,13 @@ var PS = {};
           if (v instanceof Cons) {
               return Data_Semigroup.append(semigroupList)(v1(v.value0))(Control_Bind.bind(bindList)(v.value1)(v1));
           };
-          throw new Error("Failed pattern match at Data.List.Types line 92, column 3 - line 92, column 19: " + [ v.constructor.name, v1.constructor.name ]);
+          throw new Error("Failed pattern match at Data.List.Types line 91, column 3 - line 91, column 19: " + [ v.constructor.name, v1.constructor.name ]);
       };
+  });
+  var applicativeList = new Control_Applicative.Applicative(function () {
+      return applyList;
+  }, function (a) {
+      return new Cons(a, Nil.value);
   });                                              
   var altList = new Control_Alt.Alt(function () {
       return functorList;
@@ -4611,8 +3487,8 @@ var PS = {};
   }, Nil.value);
   var applicativeNonEmptyList = new Control_Applicative.Applicative(function () {
       return applyNonEmptyList;
-  }, function ($137) {
-      return NonEmptyList(Data_NonEmpty.singleton(plusList)($137));
+  }, function ($132) {
+      return NonEmptyList(Data_NonEmpty.singleton(plusList)($132));
   });
   exports["Nil"] = Nil;
   exports["Cons"] = Cons;
@@ -4622,6 +3498,7 @@ var PS = {};
   exports["functorList"] = functorList;
   exports["foldableList"] = foldableList;
   exports["applyList"] = applyList;
+  exports["applicativeList"] = applicativeList;
   exports["bindList"] = bindList;
   exports["altList"] = altList;
   exports["plusList"] = plusList;
@@ -4630,7 +3507,7 @@ var PS = {};
   exports["applicativeNonEmptyList"] = applicativeNonEmptyList;
 })(PS["Data.List.Types"] = PS["Data.List.Types"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Alt = PS["Control.Alt"];
@@ -4680,7 +3557,7 @@ var PS = {};
                       v = __tco_v;
                       continue tco;
                   };
-                  throw new Error("Failed pattern match at Data.List line 352, column 1 - line 355, column 36: " + [ acc.constructor.name, v.constructor.name ]);
+                  throw new Error("Failed pattern match at Data.List line 359, column 1 - line 362, column 36: " + [ acc.constructor.name, v.constructor.name ]);
               };
           };
       };
@@ -4702,14 +3579,14 @@ var PS = {};
                       };
                       if (v1 instanceof Data_List_Types.Cons) {
                           var __tco_acc = new Data_List_Types.Cons(v1.value0, acc);
-                          var __tco_v = v - 1;
+                          var __tco_v = v - 1 | 0;
                           var __tco_v1 = v1.value1;
                           acc = __tco_acc;
                           v = __tco_v;
                           v1 = __tco_v1;
                           continue tco;
                       };
-                      throw new Error("Failed pattern match at Data.List line 479, column 1 - line 483, column 46: " + [ acc.constructor.name, v.constructor.name, v1.constructor.name ]);
+                      throw new Error("Failed pattern match at Data.List line 486, column 1 - line 490, column 46: " + [ acc.constructor.name, v.constructor.name, v1.constructor.name ]);
                   };
               };
           };
@@ -4741,7 +3618,7 @@ var PS = {};
                                   acc = __tco_acc;
                                   continue tco;
                               };
-                              throw new Error("Failed pattern match at Data.List line 643, column 1 - line 647, column 52: " + [ v.constructor.name, v1.constructor.name, acc.constructor.name ]);
+                              throw new Error("Failed pattern match at Data.List line 650, column 1 - line 654, column 52: " + [ v.constructor.name, v1.constructor.name, acc.constructor.name ]);
                           };
                       };
                   };
@@ -4779,25 +3656,31 @@ var PS = {};
                                       rest = __tco_rest;
                                       continue tco;
                                   };
-                                  throw new Error("Failed pattern match at Data.List line 137, column 1 - line 141, column 65: " + [ s.constructor.name, e.constructor.name, step.constructor.name, rest.constructor.name ]);
+                                  throw new Error("Failed pattern match at Data.List line 138, column 1 - line 142, column 65: " + [ s.constructor.name, e.constructor.name, step.constructor.name, rest.constructor.name ]);
                               };
                           };
                       };
                   };
               };
               return go(end)(start)((function () {
-                  var $184 = start > end;
-                  if ($184) {
+                  var $190 = start > end;
+                  if ($190) {
                       return 1;
                   };
-                  if (!$184) {
-                      return -1;
+                  if (!$190) {
+                      return -1 | 0;
                   };
-                  throw new Error("Failed pattern match at Data.List line 138, column 45 - line 138, column 74: " + [ $184.constructor.name ]);
+                  throw new Error("Failed pattern match at Data.List line 139, column 45 - line 139, column 74: " + [ $190.constructor.name ]);
               })())(Data_List_Types.Nil.value);
           };
-          throw new Error("Failed pattern match at Data.List line 137, column 1 - line 141, column 65: " + [ start.constructor.name, end.constructor.name ]);
+          throw new Error("Failed pattern match at Data.List line 138, column 1 - line 142, column 65: " + [ start.constructor.name, end.constructor.name ]);
       };
+  };
+  var $$null = function (v) {
+      if (v instanceof Data_List_Types.Nil) {
+          return true;
+      };
+      return false;
   };
   var some = function (dictAlternative) {
       return function (dictLazy) {
@@ -4833,12 +3716,12 @@ var PS = {};
               };
               if (v instanceof Data_List_Types.Cons) {
                   var __tco_v = v.value1;
-                  var __tco_v1 = v1 - 1;
+                  var __tco_v1 = v1 - 1 | 0;
                   v = __tco_v;
                   v1 = __tco_v1;
                   continue tco;
               };
-              throw new Error("Failed pattern match at Data.List line 268, column 1 - line 268, column 22: " + [ v.constructor.name, v1.constructor.name ]);
+              throw new Error("Failed pattern match at Data.List line 275, column 1 - line 275, column 22: " + [ v.constructor.name, v1.constructor.name ]);
           };
       };
   };
@@ -4867,7 +3750,7 @@ var PS = {};
                           continue tco;
                       };
                   };
-                  throw new Error("Failed pattern match at Data.List line 374, column 1 - line 379, column 28: " + [ acc.constructor.name, v.constructor.name ]);
+                  throw new Error("Failed pattern match at Data.List line 381, column 1 - line 386, column 28: " + [ acc.constructor.name, v.constructor.name ]);
               };
           };
       };
@@ -4885,13 +3768,13 @@ var PS = {};
                   return Data_List_Types.Nil.value;
               };
               if (v1 instanceof Data_List_Types.Cons) {
-                  var __tco_v = v - 1;
+                  var __tco_v = v - 1 | 0;
                   var __tco_v1 = v1.value1;
                   v = __tco_v;
                   v1 = __tco_v1;
                   continue tco;
               };
-              throw new Error("Failed pattern match at Data.List line 498, column 1 - line 498, column 15: " + [ v.constructor.name, v1.constructor.name ]);
+              throw new Error("Failed pattern match at Data.List line 505, column 1 - line 505, column 15: " + [ v.constructor.name, v1.constructor.name ]);
           };
       };
   };                                                                              
@@ -4904,6 +3787,7 @@ var PS = {};
   exports["index"] = index;
   exports["length"] = length;
   exports["many"] = many;
+  exports["null"] = $$null;
   exports["range"] = range;
   exports["reverse"] = reverse;
   exports["singleton"] = singleton;
@@ -4912,7 +3796,7 @@ var PS = {};
   exports["zipWith"] = zipWith;
 })(PS["Data.List"] = PS["Data.List"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Data_List = PS["Data.List"];
   var Data_Maybe = PS["Data.Maybe"];
@@ -4968,7 +3852,7 @@ var PS = {};
   exports["uncons"] = uncons;
 })(PS["Data.CatQueue"] = PS["Data.CatQueue"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Data_CatQueue = PS["Data.CatQueue"];
   var Data_Foldable = PS["Data.Foldable"];
@@ -5122,23 +4006,29 @@ var PS = {};
   exports["semigroupCatList"] = semigroupCatList;
 })(PS["Data.CatList"] = PS["Data.CatList"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Monad_Rec_Class = PS["Control.Monad.Rec.Class"];
   var Control_Monad_Trans_Class = PS["Control.Monad.Trans.Class"];
   var Data_CatList = PS["Data.CatList"];
   var Data_Either = PS["Data.Either"];
+  var Data_Foldable = PS["Data.Foldable"];
   var Data_Inject = PS["Data.Inject"];
   var Data_Maybe = PS["Data.Maybe"];
+  var Data_Traversable = PS["Data.Traversable"];
   var Data_Tuple = PS["Data.Tuple"];
   var Unsafe_Coerce = PS["Unsafe.Coerce"];
+  var Data_Eq = PS["Data.Eq"];
+  var Data_Ord = PS["Data.Ord"];
   var Data_Functor = PS["Data.Functor"];
   var Control_Bind = PS["Control.Bind"];
   var Control_Semigroupoid = PS["Control.Semigroupoid"];
   var Control_Applicative = PS["Control.Applicative"];
   var Control_Apply = PS["Control.Apply"];
   var Control_Monad = PS["Control.Monad"];
+  var Data_Function = PS["Data.Function"];
+  var Control_Category = PS["Control.Category"];
   var Data_Semigroup = PS["Data.Semigroup"];
   var Free = (function () {
       function Free(value0, value1) {
@@ -5185,40 +4075,23 @@ var PS = {};
               };
           };
           if (v.value0 instanceof Return) {
-              var $21 = Data_CatList.uncons(v.value1);
-              if ($21 instanceof Data_Maybe.Nothing) {
+              var $37 = Data_CatList.uncons(v.value1);
+              if ($37 instanceof Data_Maybe.Nothing) {
                   return new Return(Unsafe_Coerce.unsafeCoerce(v.value0.value0));
               };
-              if ($21 instanceof Data_Maybe.Just) {
-                  var __tco_v = Unsafe_Coerce.unsafeCoerce(concatF(runExpF($21.value0.value0)(v.value0.value0))($21.value0.value1));
+              if ($37 instanceof Data_Maybe.Just) {
+                  var __tco_v = Unsafe_Coerce.unsafeCoerce(concatF(runExpF($37.value0.value0)(v.value0.value0))($37.value0.value1));
                   v = __tco_v;
                   continue tco;
               };
-              throw new Error("Failed pattern match at Control.Monad.Free line 173, column 7 - line 177, column 64: " + [ $21.constructor.name ]);
+              throw new Error("Failed pattern match at Control.Monad.Free line 206, column 7 - line 210, column 64: " + [ $37.constructor.name ]);
           };
           if (v.value0 instanceof Bind) {
               return new Bind(v.value0.value0, function (a) {
                   return Unsafe_Coerce.unsafeCoerce(concatF(v.value0.value1(a))(v.value1));
               });
           };
-          throw new Error("Failed pattern match at Control.Monad.Free line 171, column 3 - line 179, column 56: " + [ v.value0.constructor.name ]);
-      };
-  };
-  var runFreeM = function (dictFunctor) {
-      return function (dictMonadRec) {
-          return function (k) {
-              var go = function (f) {
-                  var $30 = toView(f);
-                  if ($30 instanceof Return) {
-                      return Data_Functor.map((((dictMonadRec["__superclass_Control.Monad.Monad_0"]())["__superclass_Control.Bind.Bind_1"]())["__superclass_Control.Apply.Apply_0"]())["__superclass_Data.Functor.Functor_0"]())(Control_Monad_Rec_Class.Done.create)(Control_Applicative.pure((dictMonadRec["__superclass_Control.Monad.Monad_0"]())["__superclass_Control.Applicative.Applicative_0"]())($30.value0));
-                  };
-                  if ($30 instanceof Bind) {
-                      return Data_Functor.map((((dictMonadRec["__superclass_Control.Monad.Monad_0"]())["__superclass_Control.Bind.Bind_1"]())["__superclass_Control.Apply.Apply_0"]())["__superclass_Data.Functor.Functor_0"]())(Control_Monad_Rec_Class.Loop.create)(k(Data_Functor.map(dictFunctor)($30.value1)($30.value0)));
-                  };
-                  throw new Error("Failed pattern match at Control.Monad.Free line 149, column 10 - line 151, column 37: " + [ $30.constructor.name ]);
-              };
-              return Control_Monad_Rec_Class.tailRecM(dictMonadRec)(go);
-          };
+          throw new Error("Failed pattern match at Control.Monad.Free line 204, column 3 - line 212, column 56: " + [ v.value0.constructor.name ]);
       };
   };
   var fromView = function (f) {
@@ -5231,8 +4104,8 @@ var PS = {};
   });
   var freeFunctor = new Data_Functor.Functor(function (k) {
       return function (f) {
-          return Control_Bind.bindFlipped(freeBind)(function ($57) {
-              return Control_Applicative.pure(freeApplicative)(k($57));
+          return Control_Bind.bindFlipped(freeBind)(function ($85) {
+              return Control_Applicative.pure(freeApplicative)(k($85));
           })(f);
       };
   });
@@ -5248,16 +4121,33 @@ var PS = {};
   }, Control_Monad.ap(freeMonad));
   var freeApplicative = new Control_Applicative.Applicative(function () {
       return freeApply;
-  }, function ($58) {
-      return fromView(Return.create($58));
+  }, function ($86) {
+      return fromView(Return.create($86));
   });
   var liftF = function (f) {
-      return fromView(new Bind(Unsafe_Coerce.unsafeCoerce(f), function ($59) {
-          return Control_Applicative.pure(freeApplicative)(Unsafe_Coerce.unsafeCoerce($59));
+      return fromView(new Bind(Unsafe_Coerce.unsafeCoerce(f), function ($87) {
+          return Control_Applicative.pure(freeApplicative)(Unsafe_Coerce.unsafeCoerce($87));
       }));
   };
+  var foldFree = function (dictMonadRec) {
+      return function (k) {
+          var go = function (f) {
+              var $81 = toView(f);
+              if ($81 instanceof Return) {
+                  return Data_Functor.map((((dictMonadRec["__superclass_Control.Monad.Monad_0"]())["__superclass_Control.Bind.Bind_1"]())["__superclass_Control.Apply.Apply_0"]())["__superclass_Data.Functor.Functor_0"]())(Control_Monad_Rec_Class.Done.create)(Control_Applicative.pure((dictMonadRec["__superclass_Control.Monad.Monad_0"]())["__superclass_Control.Applicative.Applicative_0"]())($81.value0));
+              };
+              if ($81 instanceof Bind) {
+                  return Data_Functor.map((((dictMonadRec["__superclass_Control.Monad.Monad_0"]())["__superclass_Control.Bind.Bind_1"]())["__superclass_Control.Apply.Apply_0"]())["__superclass_Data.Functor.Functor_0"]())(function ($94) {
+                      return Control_Monad_Rec_Class.Loop.create($81.value1($94));
+                  })(k($81.value0));
+              };
+              throw new Error("Failed pattern match at Control.Monad.Free line 147, column 10 - line 149, column 37: " + [ $81.constructor.name ]);
+          };
+          return Control_Monad_Rec_Class.tailRecM(dictMonadRec)(go);
+      };
+  };
+  exports["foldFree"] = foldFree;
   exports["liftF"] = liftF;
-  exports["runFreeM"] = runFreeM;
   exports["freeFunctor"] = freeFunctor;
   exports["freeBind"] = freeBind;
   exports["freeApplicative"] = freeApplicative;
@@ -5265,7 +4155,7 @@ var PS = {};
   exports["freeMonad"] = freeMonad;
 })(PS["Control.Monad.Free"] = PS["Control.Monad.Free"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Alt = PS["Control.Alt"];
@@ -5378,95 +4268,12 @@ var PS = {};
   exports["monadStateStateT"] = monadStateStateT;
 })(PS["Control.Monad.State.Trans"] = PS["Control.Monad.State.Trans"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Control_Monad_State_Class = PS["Control.Monad.State.Class"];
-  var Control_Monad_State_Trans = PS["Control.Monad.State.Trans"];
-  var Data_Identity = PS["Data.Identity"];
-  var Data_Newtype = PS["Data.Newtype"];
-  var Data_Tuple = PS["Data.Tuple"];
-  var Control_Semigroupoid = PS["Control.Semigroupoid"];
-  var runState = function (v) {
-      return function ($14) {
-          return Data_Newtype.unwrap(Data_Identity.newtypeIdentity)(v($14));
-      };
-  };
-  exports["runState"] = runState;
-})(PS["Control.Monad.State"] = PS["Control.Monad.State"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Control_Monad_Writer_Class = PS["Control.Monad.Writer.Class"];
-  var Control_Monad_Writer_Trans = PS["Control.Monad.Writer.Trans"];
-  var Data_Identity = PS["Data.Identity"];
-  var Data_Newtype = PS["Data.Newtype"];
-  var Data_Tuple = PS["Data.Tuple"];
-  var Control_Semigroupoid = PS["Control.Semigroupoid"];        
-  var runWriter = function ($0) {
-      return Data_Newtype.unwrap(Data_Identity.newtypeIdentity)(Control_Monad_Writer_Trans.runWriterT($0));
-  };
-  exports["runWriter"] = runWriter;
-})(PS["Control.Monad.Writer"] = PS["Control.Monad.Writer"] || {});
-(function(exports) {
     "use strict";
 
-  exports.eventListener = function (fn) {
-    return function (event) {
-      return fn(event)();
-    };
+  exports.currentTarget = function (e) {
+    return e.currentTarget;
   };
-
-  exports.addEventListener = function (type) {
-    return function (listener) {
-      return function (useCapture) {
-        return function (target) {
-          return function () {
-            target.addEventListener(type, listener, useCapture);
-            return {};
-          };
-        };
-      };
-    };
-  };
-})(PS["DOM.Event.EventTarget"] = PS["DOM.Event.EventTarget"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var $foreign = PS["DOM.Event.EventTarget"];
-  var Prelude = PS["Prelude"];
-  var Control_Monad_Eff = PS["Control.Monad.Eff"];
-  var Control_Monad_Eff_Exception = PS["Control.Monad.Eff.Exception"];
-  var DOM = PS["DOM"];
-  var DOM_Event_Types = PS["DOM.Event.Types"];
-  exports["addEventListener"] = $foreign.addEventListener;
-  exports["eventListener"] = $foreign.eventListener;
-})(PS["DOM.Event.EventTarget"] = PS["DOM.Event.EventTarget"] || {});
-(function(exports) {
-  /* global window */
-  "use strict";
-
-  exports.window = function () {
-    return window;
-  };
-})(PS["DOM.HTML"] = PS["DOM.HTML"] || {});
-(function(exports) {
-    "use strict";
-
-  exports._readHTMLElement = function (failure) {
-    return function (success) {
-      return function (value) {
-        var tag = Object.prototype.toString.call(value);
-        if (tag.indexOf("[object HTML") === 0 && tag.indexOf("Element]") === tag.length - 8) {
-          return success(value);
-        } else {
-          return failure(tag);
-        }
-      };
-    };
-  };
-})(PS["DOM.HTML.Types"] = PS["DOM.HTML.Types"] || {});
+})(PS["DOM.Event.Event"] = PS["DOM.Event.Event"] || {});
 (function(exports) {
   /* global exports */
   "use strict";
@@ -5541,6 +4348,18 @@ var PS = {};
   };
 })(PS["Data.Int"] = PS["Data.Int"] || {});
 (function(exports) {
+  /* globals exports */
+  "use strict";         
+
+  exports.infinity = Infinity;
+})(PS["Global"] = PS["Global"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var $foreign = PS["Global"];
+  exports["infinity"] = $foreign.infinity;
+})(PS["Global"] = PS["Global"] || {});
+(function(exports) {
     "use strict";
 
   exports.remainder = function (n) {
@@ -5552,32 +4371,38 @@ var PS = {};
   exports.round = Math.round;
 })(PS["Math"] = PS["Math"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Math"];
   exports["remainder"] = $foreign.remainder;
   exports["round"] = $foreign.round;
 })(PS["Math"] = PS["Math"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Data.Int"];
-  var Data_Boolean = PS["Data.Boolean"];
-  var Data_BooleanAlgebra = PS["Data.BooleanAlgebra"];
-  var Data_Bounded = PS["Data.Bounded"];
-  var Data_Eq = PS["Data.Eq"];
-  var Data_Function = PS["Data.Function"];
+  var Prelude = PS["Prelude"];
   var Data_Int_Bits = PS["Data.Int.Bits"];
   var Data_Maybe = PS["Data.Maybe"];
-  var Data_Ord = PS["Data.Ord"];
+  var Global = PS["Global"];
   var $$Math = PS["Math"];
-  var Partial_Unsafe = PS["Partial.Unsafe"];
   var Data_HeytingAlgebra = PS["Data.HeytingAlgebra"];
+  var Data_Ord = PS["Data.Ord"];
+  var Data_Boolean = PS["Data.Boolean"];
+  var Data_Eq = PS["Data.Eq"];
+  var Data_Ring = PS["Data.Ring"];
+  var Data_Bounded = PS["Data.Bounded"];
   var Control_Semigroupoid = PS["Control.Semigroupoid"];
   var fromStringAs = $foreign.fromStringAsImpl(Data_Maybe.Just.create)(Data_Maybe.Nothing.value);
   var fromString = fromStringAs(10);
   var fromNumber = $foreign.fromNumberImpl(Data_Maybe.Just.create)(Data_Maybe.Nothing.value);
   var unsafeClamp = function (x) {
+      if (x === Global.infinity) {
+          return 0;
+      };
+      if (x === -Global.infinity) {
+          return 0;
+      };
       if (x >= $foreign.toNumber(Data_Bounded.top(Data_Bounded.boundedInt))) {
           return Data_Bounded.top(Data_Bounded.boundedInt);
       };
@@ -5585,14 +4410,12 @@ var PS = {};
           return Data_Bounded.bottom(Data_Bounded.boundedInt);
       };
       if (Data_Boolean.otherwise) {
-          return Partial_Unsafe.unsafePartial(function (dictPartial) {
-              return Data_Maybe.fromJust(dictPartial)(fromNumber(x));
-          });
+          return Data_Maybe.fromMaybe(0)(fromNumber(x));
       };
-      throw new Error("Failed pattern match at Data.Int line 66, column 1 - line 69, column 56: " + [ x.constructor.name ]);
+      throw new Error("Failed pattern match at Data.Int line 63, column 1 - line 68, column 43: " + [ x.constructor.name ]);
   };
-  var round = function ($3) {
-      return unsafeClamp($$Math.round($3));
+  var round = function ($2) {
+      return unsafeClamp($$Math.round($2));
   };
   exports["fromNumber"] = fromNumber;
   exports["fromString"] = fromString;
@@ -5601,7 +4424,7 @@ var PS = {};
   exports["toNumber"] = $foreign.toNumber;
 })(PS["Data.Int"] = PS["Data.Int"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Data_Foldable = PS["Data.Foldable"];
@@ -5676,13 +4499,13 @@ var PS = {};
   };
 })(PS["Data.String.Unsafe"] = PS["Data.String.Unsafe"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Data.String.Unsafe"];
   exports["charAt"] = $foreign.charAt;
 })(PS["Data.String.Unsafe"] = PS["Data.String.Unsafe"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Data.String"];
   var Prelude = PS["Prelude"];
@@ -5730,7 +4553,7 @@ var PS = {};
   exports["split"] = $foreign.split;
 })(PS["Data.String"] = PS["Data.String"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Data.Foreign"];
   var Prelude = PS["Prelude"];
@@ -5789,7 +4612,7 @@ var PS = {};
           if (Data_Boolean.otherwise) {
               return fail(new TypeMismatch(tag, $foreign.tagOf(value)));
           };
-          throw new Error("Failed pattern match at Data.Foreign line 108, column 1 - line 110, column 54: " + [ tag.constructor.name, value.constructor.name ]);
+          throw new Error("Failed pattern match at Data.Foreign line 109, column 1 - line 111, column 54: " + [ tag.constructor.name, value.constructor.name ]);
       };
   };
   var readBoolean = unsafeReadTagged("Boolean");
@@ -5806,7 +4629,102 @@ var PS = {};
   exports["typeOf"] = $foreign.typeOf;
 })(PS["Data.Foreign"] = PS["Data.Foreign"] || {});
 (function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Data_Foreign = PS["Data.Foreign"];
+  var Data_Newtype = PS["Data.Newtype"];
+  var DOM_Event_Types = PS["DOM.Event.Types"];
+  var Unsafe_Coerce = PS["Unsafe.Coerce"];
+  var DOM_Util_FFI = PS["DOM.Util.FFI"];
+  var Data_Eq = PS["Data.Eq"];
+  var Data_Ord = PS["Data.Ord"];                                     
+  var elementToNode = Unsafe_Coerce.unsafeCoerce;
+  exports["elementToNode"] = elementToNode;
+})(PS["DOM.Node.Types"] = PS["DOM.Node.Types"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var $foreign = PS["DOM.Event.Event"];
+  var Prelude = PS["Prelude"];
+  var Control_Monad_Eff = PS["Control.Monad.Eff"];
+  var Data_Enum = PS["Data.Enum"];
+  var Data_Maybe = PS["Data.Maybe"];
+  var DOM = PS["DOM"];
+  var DOM_Event_EventPhase = PS["DOM.Event.EventPhase"];
+  var DOM_Event_Types = PS["DOM.Event.Types"];
+  var DOM_Node_Types = PS["DOM.Node.Types"];
+  var Control_Semigroupoid = PS["Control.Semigroupoid"];
+  exports["currentTarget"] = $foreign.currentTarget;
+})(PS["DOM.Event.Event"] = PS["DOM.Event.Event"] || {});
+(function(exports) {
     "use strict";
+
+  exports.eventListener = function (fn) {
+    return function (event) {
+      return fn(event)();
+    };
+  };
+
+  exports.addEventListener = function (type) {
+    return function (listener) {
+      return function (useCapture) {
+        return function (target) {
+          return function () {
+            target.addEventListener(type, listener, useCapture);
+            return {};
+          };
+        };
+      };
+    };
+  };
+})(PS["DOM.Event.EventTarget"] = PS["DOM.Event.EventTarget"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var $foreign = PS["DOM.Event.EventTarget"];
+  var Prelude = PS["Prelude"];
+  var Control_Monad_Eff = PS["Control.Monad.Eff"];
+  var Control_Monad_Eff_Exception = PS["Control.Monad.Eff.Exception"];
+  var DOM = PS["DOM"];
+  var DOM_Event_Types = PS["DOM.Event.Types"];
+  exports["addEventListener"] = $foreign.addEventListener;
+  exports["eventListener"] = $foreign.eventListener;
+})(PS["DOM.Event.EventTarget"] = PS["DOM.Event.EventTarget"] || {});
+(function(exports) {
+  /* global window */
+  "use strict";
+
+  exports.window = function () {
+    return window;
+  };
+})(PS["DOM.HTML"] = PS["DOM.HTML"] || {});
+(function(exports) {
+    "use strict";
+
+  exports._readHTMLElement = function (failure) {
+    return function (success) {
+      return function (value) {
+        var tag = Object.prototype.toString.call(value);
+        if (tag.indexOf("[object HTML") === 0 && tag.indexOf("Element]") === tag.length - 8) {
+          return success(value);
+        } else {
+          return failure(tag);
+        }
+      };
+    };
+  };
+})(PS["DOM.HTML.Types"] = PS["DOM.HTML.Types"] || {});
+(function(exports) {
+    "use strict";
+
+  //------------------------------------------------------------------------------
+  // Array size ------------------------------------------------------------------
+  //------------------------------------------------------------------------------
+
+  exports.length = function (xs) {
+    return xs.length;
+  };
 
   exports.snoc = function (l) {
     return function (e) {
@@ -5829,7 +4747,7 @@ var PS = {};
   };
 })(PS["Data.Array"] = PS["Data.Array"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Data.Array"];
   var Prelude = PS["Prelude"];
@@ -5837,6 +4755,9 @@ var PS = {};
   var Control_Alternative = PS["Control.Alternative"];
   var Control_Lazy = PS["Control.Lazy"];
   var Control_Monad_Rec_Class = PS["Control.Monad.Rec.Class"];
+  var Control_Monad_ST = PS["Control.Monad.ST"];
+  var Data_Array_ST = PS["Data.Array.ST"];
+  var Data_Array_ST_Iterator = PS["Data.Array.ST.Iterator"];
   var Data_Foldable = PS["Data.Foldable"];
   var Data_Maybe = PS["Data.Maybe"];
   var Data_NonEmpty = PS["Data.NonEmpty"];
@@ -5855,10 +4776,12 @@ var PS = {};
   var Control_Apply = PS["Control.Apply"];
   var Data_Functor = PS["Data.Functor"];
   var Control_Applicative = PS["Control.Applicative"];
-  var Control_Semigroupoid = PS["Control.Semigroupoid"];
   var Control_Bind = PS["Control.Bind"];
+  var Control_Monad_Eff = PS["Control.Monad.Eff"];
+  var Control_Semigroupoid = PS["Control.Semigroupoid"];
   var Data_Semigroup = PS["Data.Semigroup"];
   var Control_Category = PS["Control.Category"];
+  exports["length"] = $foreign.length;
   exports["snoc"] = $foreign.snoc;
 })(PS["Data.Array"] = PS["Data.Array"] || {});
 (function(exports) {
@@ -5880,7 +4803,7 @@ var PS = {};
   };
 })(PS["Data.Foreign.Index"] = PS["Data.Foreign.Index"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Data.Foreign.Index"];
   var Prelude = PS["Prelude"];
@@ -5954,7 +4877,7 @@ var PS = {};
   exports["indexString"] = indexString;
 })(PS["Data.Foreign.Index"] = PS["Data.Foreign.Index"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Alt = PS["Control.Alt"];
@@ -6010,7 +4933,7 @@ var PS = {};
   exports["booleanIsForeign"] = booleanIsForeign;
 })(PS["Data.Foreign.Class"] = PS["Data.Foreign.Class"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["DOM.HTML.Types"];
   var Prelude = PS["Prelude"];
@@ -6032,14 +4955,16 @@ var PS = {};
       return Control_Monad_Except_Trans.except(Data_Identity.applicativeIdentity)(Data_Either.Right.create($1));
   });                                                                    
   var htmlElementToNode = Unsafe_Coerce.unsafeCoerce;   
-  var htmlDocumentToParentNode = Unsafe_Coerce.unsafeCoerce;
+  var htmlDocumentToParentNode = Unsafe_Coerce.unsafeCoerce; 
+  var htmlDocumentToDocument = Unsafe_Coerce.unsafeCoerce;
+  exports["htmlDocumentToDocument"] = htmlDocumentToDocument;
   exports["htmlDocumentToParentNode"] = htmlDocumentToParentNode;
   exports["htmlElementToNode"] = htmlElementToNode;
   exports["readHTMLElement"] = readHTMLElement;
   exports["windowToEventTarget"] = windowToEventTarget;
 })(PS["DOM.HTML.Types"] = PS["DOM.HTML.Types"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["DOM.HTML"];
   var Control_Monad_Eff = PS["Control.Monad.Eff"];
@@ -6048,12 +4973,273 @@ var PS = {};
   exports["window"] = $foreign.window;
 })(PS["DOM.HTML"] = PS["DOM.HTML"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var DOM_Event_Types = PS["DOM.Event.Types"];
   var load = "load";
   exports["load"] = load;
 })(PS["DOM.HTML.Event.EventTypes"] = PS["DOM.HTML.Event.EventTypes"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var InputButton = (function () {
+      function InputButton() {
+
+      };
+      InputButton.value = new InputButton();
+      return InputButton;
+  })();
+  var InputCheckbox = (function () {
+      function InputCheckbox() {
+
+      };
+      InputCheckbox.value = new InputCheckbox();
+      return InputCheckbox;
+  })();
+  var InputColor = (function () {
+      function InputColor() {
+
+      };
+      InputColor.value = new InputColor();
+      return InputColor;
+  })();
+  var InputDate = (function () {
+      function InputDate() {
+
+      };
+      InputDate.value = new InputDate();
+      return InputDate;
+  })();
+  var InputDatetime = (function () {
+      function InputDatetime() {
+
+      };
+      InputDatetime.value = new InputDatetime();
+      return InputDatetime;
+  })();
+  var InputDatetimeLocal = (function () {
+      function InputDatetimeLocal() {
+
+      };
+      InputDatetimeLocal.value = new InputDatetimeLocal();
+      return InputDatetimeLocal;
+  })();
+  var InputEmail = (function () {
+      function InputEmail() {
+
+      };
+      InputEmail.value = new InputEmail();
+      return InputEmail;
+  })();
+  var InputFile = (function () {
+      function InputFile() {
+
+      };
+      InputFile.value = new InputFile();
+      return InputFile;
+  })();
+  var InputHidden = (function () {
+      function InputHidden() {
+
+      };
+      InputHidden.value = new InputHidden();
+      return InputHidden;
+  })();
+  var InputImage = (function () {
+      function InputImage() {
+
+      };
+      InputImage.value = new InputImage();
+      return InputImage;
+  })();
+  var InputMonth = (function () {
+      function InputMonth() {
+
+      };
+      InputMonth.value = new InputMonth();
+      return InputMonth;
+  })();
+  var InputNumber = (function () {
+      function InputNumber() {
+
+      };
+      InputNumber.value = new InputNumber();
+      return InputNumber;
+  })();
+  var InputPassword = (function () {
+      function InputPassword() {
+
+      };
+      InputPassword.value = new InputPassword();
+      return InputPassword;
+  })();
+  var InputRadio = (function () {
+      function InputRadio() {
+
+      };
+      InputRadio.value = new InputRadio();
+      return InputRadio;
+  })();
+  var InputRange = (function () {
+      function InputRange() {
+
+      };
+      InputRange.value = new InputRange();
+      return InputRange;
+  })();
+  var InputReset = (function () {
+      function InputReset() {
+
+      };
+      InputReset.value = new InputReset();
+      return InputReset;
+  })();
+  var InputSearch = (function () {
+      function InputSearch() {
+
+      };
+      InputSearch.value = new InputSearch();
+      return InputSearch;
+  })();
+  var InputSubmit = (function () {
+      function InputSubmit() {
+
+      };
+      InputSubmit.value = new InputSubmit();
+      return InputSubmit;
+  })();
+  var InputTel = (function () {
+      function InputTel() {
+
+      };
+      InputTel.value = new InputTel();
+      return InputTel;
+  })();
+  var InputText = (function () {
+      function InputText() {
+
+      };
+      InputText.value = new InputText();
+      return InputText;
+  })();
+  var InputTime = (function () {
+      function InputTime() {
+
+      };
+      InputTime.value = new InputTime();
+      return InputTime;
+  })();
+  var InputUrl = (function () {
+      function InputUrl() {
+
+      };
+      InputUrl.value = new InputUrl();
+      return InputUrl;
+  })();
+  var InputWeek = (function () {
+      function InputWeek() {
+
+      };
+      InputWeek.value = new InputWeek();
+      return InputWeek;
+  })();
+  var renderInputType = function (v) {
+      if (v instanceof InputButton) {
+          return "button";
+      };
+      if (v instanceof InputCheckbox) {
+          return "checkbox";
+      };
+      if (v instanceof InputColor) {
+          return "color";
+      };
+      if (v instanceof InputDate) {
+          return "date";
+      };
+      if (v instanceof InputDatetime) {
+          return "datetime";
+      };
+      if (v instanceof InputDatetimeLocal) {
+          return "datetime-local";
+      };
+      if (v instanceof InputEmail) {
+          return "email";
+      };
+      if (v instanceof InputFile) {
+          return "file";
+      };
+      if (v instanceof InputHidden) {
+          return "hidden";
+      };
+      if (v instanceof InputImage) {
+          return "image";
+      };
+      if (v instanceof InputMonth) {
+          return "month";
+      };
+      if (v instanceof InputNumber) {
+          return "number";
+      };
+      if (v instanceof InputPassword) {
+          return "password";
+      };
+      if (v instanceof InputRadio) {
+          return "radio";
+      };
+      if (v instanceof InputRange) {
+          return "range";
+      };
+      if (v instanceof InputReset) {
+          return "reset";
+      };
+      if (v instanceof InputSearch) {
+          return "search";
+      };
+      if (v instanceof InputSubmit) {
+          return "submit";
+      };
+      if (v instanceof InputTel) {
+          return "tel";
+      };
+      if (v instanceof InputText) {
+          return "text";
+      };
+      if (v instanceof InputTime) {
+          return "time";
+      };
+      if (v instanceof InputUrl) {
+          return "url";
+      };
+      if (v instanceof InputWeek) {
+          return "week";
+      };
+      throw new Error("Failed pattern match at DOM.HTML.Indexed.InputType line 29, column 19 - line 52, column 16: " + [ v.constructor.name ]);
+  };
+  exports["InputButton"] = InputButton;
+  exports["InputCheckbox"] = InputCheckbox;
+  exports["InputColor"] = InputColor;
+  exports["InputDate"] = InputDate;
+  exports["InputDatetime"] = InputDatetime;
+  exports["InputDatetimeLocal"] = InputDatetimeLocal;
+  exports["InputEmail"] = InputEmail;
+  exports["InputFile"] = InputFile;
+  exports["InputHidden"] = InputHidden;
+  exports["InputImage"] = InputImage;
+  exports["InputMonth"] = InputMonth;
+  exports["InputNumber"] = InputNumber;
+  exports["InputPassword"] = InputPassword;
+  exports["InputRadio"] = InputRadio;
+  exports["InputRange"] = InputRange;
+  exports["InputReset"] = InputReset;
+  exports["InputSearch"] = InputSearch;
+  exports["InputSubmit"] = InputSubmit;
+  exports["InputTel"] = InputTel;
+  exports["InputText"] = InputText;
+  exports["InputTime"] = InputTime;
+  exports["InputUrl"] = InputUrl;
+  exports["InputWeek"] = InputWeek;
+  exports["renderInputType"] = renderInputType;
+})(PS["DOM.HTML.Indexed.InputType"] = PS["DOM.HTML.Indexed.InputType"] || {});
 (function(exports) {
     "use strict";
 
@@ -6077,7 +5263,7 @@ var PS = {};
   };
 })(PS["Data.Nullable"] = PS["Data.Nullable"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Data.Nullable"];
   var Prelude = PS["Prelude"];
@@ -6096,20 +5282,42 @@ var PS = {};
   exports["toNullable"] = toNullable;
 })(PS["Data.Nullable"] = PS["Data.Nullable"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["DOM.HTML.Window"];
-  var Prelude = PS["Prelude"];
-  var Data_Maybe = PS["Data.Maybe"];
-  var Data_Nullable = PS["Data.Nullable"];
   var Control_Monad_Eff = PS["Control.Monad.Eff"];
   var DOM = PS["DOM"];
   var DOM_HTML_Types = PS["DOM.HTML.Types"];
+  var Data_Maybe = PS["Data.Maybe"];
+  var Data_Nullable = PS["Data.Nullable"];
+  var Prelude = PS["Prelude"];
   var Data_Functor = PS["Data.Functor"];
   exports["document"] = $foreign.document;
 })(PS["DOM.HTML.Window"] = PS["DOM.HTML.Window"] || {});
 (function(exports) {
     "use strict";
+
+  var getEffProp = function (name) {
+    return function (node) {
+      return function () {
+        return node[name];
+      };
+    };
+  };                                                  
+
+  exports.parentNode = getEffProp("parentNode");          
+
+  exports.nextSibling = getEffProp("nextSibling");
+
+  exports.insertBefore = function (node1) {
+    return function (node2) {
+      return function (parent) {
+        return function () {
+          return parent.insertBefore(node1, node2);
+        };
+      };
+    };
+  };
 
   exports.appendChild = function (node) {
     return function (parent) {
@@ -6118,9 +5326,17 @@ var PS = {};
       };
     };
   };
+
+  exports.removeChild = function (node) {
+    return function (parent) {
+      return function () {
+        return parent.removeChild(node);
+      };
+    };
+  };
 })(PS["DOM.Node.Node"] = PS["DOM.Node.Node"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["DOM.Node.Node"];
   var Prelude = PS["Prelude"];
@@ -6133,6 +5349,10 @@ var PS = {};
   var DOM_Node_Types = PS["DOM.Node.Types"];
   var Control_Semigroupoid = PS["Control.Semigroupoid"];
   exports["appendChild"] = $foreign.appendChild;
+  exports["insertBefore"] = $foreign.insertBefore;
+  exports["nextSibling"] = $foreign.nextSibling;
+  exports["parentNode"] = $foreign.parentNode;
+  exports["removeChild"] = $foreign.removeChild;
 })(PS["DOM.Node.Node"] = PS["DOM.Node.Node"] || {});
 (function(exports) {
     "use strict";                                             
@@ -6146,7 +5366,7 @@ var PS = {};
   };
 })(PS["DOM.Node.ParentNode"] = PS["DOM.Node.ParentNode"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["DOM.Node.ParentNode"];
   var Control_Monad_Eff = PS["Control.Monad.Eff"];
@@ -6163,13 +5383,13 @@ var PS = {};
   };
 })(PS["Data.Char"] = PS["Data.Char"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Data.Char"];
   exports["toCharCode"] = $foreign.toCharCode;
 })(PS["Data.Char"] = PS["Data.Char"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Data_Char = PS["Data.Char"];
@@ -6187,20 +5407,36 @@ var PS = {};
   var Data_Semiring = PS["Data.Semiring"];
   var Data_Boolean = PS["Data.Boolean"];
   var isDigit = function (c) {
-      var diff = Data_Char.toCharCode(c) - Data_Char.toCharCode("0");
+      var diff = Data_Char.toCharCode(c) - Data_Char.toCharCode("0") | 0;
       return diff <= 9 && diff >= 0;
   };
   exports["isDigit"] = isDigit;
 })(PS["Data.Char.Unicode"] = PS["Data.Char.Unicode"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
-  var Unsafe_Coerce = PS["Unsafe.Coerce"];        
-  var runExistsR = Unsafe_Coerce.unsafeCoerce;
-  var mkExistsR = Unsafe_Coerce.unsafeCoerce;
-  exports["mkExistsR"] = mkExistsR;
-  exports["runExistsR"] = runExistsR;
-})(PS["Data.ExistsR"] = PS["Data.ExistsR"] || {});
+  var Prelude = PS["Prelude"];
+  var Data_Exists = PS["Data.Exists"];
+  var Control_Comonad = PS["Control.Comonad"];
+  var Control_Extend = PS["Control.Extend"];
+  var Control_Monad_Trans_Class = PS["Control.Monad.Trans.Class"];
+  var Data_Functor = PS["Data.Functor"];
+  var Control_Semigroupoid = PS["Control.Semigroupoid"];
+  var Control_Apply = PS["Control.Apply"];
+  var Data_Function = PS["Data.Function"];
+  var Control_Applicative = PS["Control.Applicative"];
+  var Control_Bind = PS["Control.Bind"];
+  var Control_Monad = PS["Control.Monad"];
+  var Control_Category = PS["Control.Category"];
+  var unCoyoneda = function (f) {
+      return function (v) {
+          return Data_Exists.runExists(function (v1) {
+              return f(v1.value0)(v1.value1);
+          })(v);
+      };
+  };
+  exports["unCoyoneda"] = unCoyoneda;
+})(PS["Data.Coyoneda"] = PS["Data.Coyoneda"] || {});
 (function(exports) {
     "use strict";
 
@@ -6233,7 +5469,7 @@ var PS = {};
   };
 })(PS["Data.Lazy"] = PS["Data.Lazy"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var $foreign = PS["Data.Lazy"];
   var Prelude = PS["Prelude"];
@@ -6265,7 +5501,7 @@ var PS = {};
   exports["force"] = $foreign.force;
 })(PS["Data.Lazy"] = PS["Data.Lazy"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Data_Foldable = PS["Data.Foldable"];
@@ -6461,53 +5697,96 @@ var PS = {};
       };
       return KickUp;
   })();
+  var values = function (v) {
+      if (v instanceof Leaf) {
+          return Data_List_Types.Nil.value;
+      };
+      if (v instanceof Two) {
+          return Data_Semigroup.append(Data_List_Types.semigroupList)(values(v.value0))(Data_Semigroup.append(Data_List_Types.semigroupList)(Control_Applicative.pure(Data_List_Types.applicativeList)(v.value2))(values(v.value3)));
+      };
+      if (v instanceof Three) {
+          return Data_Semigroup.append(Data_List_Types.semigroupList)(values(v.value0))(Data_Semigroup.append(Data_List_Types.semigroupList)(Control_Applicative.pure(Data_List_Types.applicativeList)(v.value2))(Data_Semigroup.append(Data_List_Types.semigroupList)(values(v.value3))(Data_Semigroup.append(Data_List_Types.semigroupList)(Control_Applicative.pure(Data_List_Types.applicativeList)(v.value5))(values(v.value6)))));
+      };
+      throw new Error("Failed pattern match at Data.Map line 423, column 1 - line 423, column 18: " + [ v.constructor.name ]);
+  };
   var lookup = function (dictOrd) {
-      return Partial_Unsafe.unsafePartial(function (dictPartial) {
-          return function (k) {
-              return function (tree) {
-                  if (tree instanceof Leaf) {
-                      return Data_Maybe.Nothing.value;
-                  };
-                  var comp = Data_Ord.compare(dictOrd);
-                  var __unused = function (dictPartial1) {
-                      return function ($dollar42) {
-                          return $dollar42;
-                      };
-                  };
-                  return __unused(dictPartial)((function () {
-                      if (tree instanceof Two) {
-                          var $177 = comp(k)(tree.value1);
-                          if ($177 instanceof Data_Ordering.EQ) {
-                              return new Data_Maybe.Just(tree.value2);
-                          };
-                          if ($177 instanceof Data_Ordering.LT) {
-                              return lookup(dictOrd)(k)(tree.value0);
-                          };
-                          return lookup(dictOrd)(k)(tree.value3);
-                      };
-                      if (tree instanceof Three) {
-                          var $182 = comp(k)(tree.value1);
-                          if ($182 instanceof Data_Ordering.EQ) {
-                              return new Data_Maybe.Just(tree.value2);
-                          };
-                          var $184 = comp(k)(tree.value4);
-                          if ($184 instanceof Data_Ordering.EQ) {
-                              return new Data_Maybe.Just(tree.value5);
-                          };
-                          if ($182 instanceof Data_Ordering.LT) {
-                              return lookup(dictOrd)(k)(tree.value0);
-                          };
-                          if ($184 instanceof Data_Ordering.GT) {
-                              return lookup(dictOrd)(k)(tree.value6);
-                          };
-                          return lookup(dictOrd)(k)(tree.value3);
-                      };
-                      throw new Error("Failed pattern match at Data.Map line 146, column 10 - line 160, column 39: " + [ tree.constructor.name ]);
-                  })());
+      return function (k) {
+          return function (tree) {
+              if (tree instanceof Leaf) {
+                  return Data_Maybe.Nothing.value;
               };
+              var comp = Data_Ord.compare(dictOrd);
+              var __unused = function (dictPartial1) {
+                  return function ($dollar43) {
+                      return $dollar43;
+                  };
+              };
+              return __unused()((function () {
+                  if (tree instanceof Two) {
+                      var $189 = comp(k)(tree.value1);
+                      if ($189 instanceof Data_Ordering.EQ) {
+                          return new Data_Maybe.Just(tree.value2);
+                      };
+                      if ($189 instanceof Data_Ordering.LT) {
+                          return lookup(dictOrd)(k)(tree.value0);
+                      };
+                      return lookup(dictOrd)(k)(tree.value3);
+                  };
+                  if (tree instanceof Three) {
+                      var $194 = comp(k)(tree.value1);
+                      if ($194 instanceof Data_Ordering.EQ) {
+                          return new Data_Maybe.Just(tree.value2);
+                      };
+                      var $196 = comp(k)(tree.value4);
+                      if ($196 instanceof Data_Ordering.EQ) {
+                          return new Data_Maybe.Just(tree.value5);
+                      };
+                      if ($194 instanceof Data_Ordering.LT) {
+                          return lookup(dictOrd)(k)(tree.value0);
+                      };
+                      if ($196 instanceof Data_Ordering.GT) {
+                          return lookup(dictOrd)(k)(tree.value6);
+                      };
+                      return lookup(dictOrd)(k)(tree.value3);
+                  };
+                  throw new Error("Failed pattern match at Data.Map line 149, column 10 - line 163, column 39: " + [ tree.constructor.name ]);
+              })());
           };
-      });
-  }; 
+      };
+  };
+  var member = function (dictOrd) {
+      return function (k) {
+          return function (m) {
+              return Data_Maybe.isJust(lookup(dictOrd)(k)(m));
+          };
+      };
+  };
+  var keys = function (v) {
+      if (v instanceof Leaf) {
+          return Data_List_Types.Nil.value;
+      };
+      if (v instanceof Two) {
+          return Data_Semigroup.append(Data_List_Types.semigroupList)(keys(v.value0))(Data_Semigroup.append(Data_List_Types.semigroupList)(Control_Applicative.pure(Data_List_Types.applicativeList)(v.value1))(keys(v.value3)));
+      };
+      if (v instanceof Three) {
+          return Data_Semigroup.append(Data_List_Types.semigroupList)(keys(v.value0))(Data_Semigroup.append(Data_List_Types.semigroupList)(Control_Applicative.pure(Data_List_Types.applicativeList)(v.value1))(Data_Semigroup.append(Data_List_Types.semigroupList)(keys(v.value3))(Data_Semigroup.append(Data_List_Types.semigroupList)(Control_Applicative.pure(Data_List_Types.applicativeList)(v.value4))(keys(v.value6)))));
+      };
+      throw new Error("Failed pattern match at Data.Map line 417, column 1 - line 417, column 16: " + [ v.constructor.name ]);
+  };
+  var functorMap = new Data_Functor.Functor(function (v) {
+      return function (v1) {
+          if (v1 instanceof Leaf) {
+              return Leaf.value;
+          };
+          if (v1 instanceof Two) {
+              return new Two(Data_Functor.map(functorMap)(v)(v1.value0), v1.value1, v(v1.value2), Data_Functor.map(functorMap)(v)(v1.value3));
+          };
+          if (v1 instanceof Three) {
+              return new Three(Data_Functor.map(functorMap)(v)(v1.value0), v1.value1, v(v1.value2), Data_Functor.map(functorMap)(v)(v1.value3), v1.value4, v(v1.value5), Data_Functor.map(functorMap)(v)(v1.value6));
+          };
+          throw new Error("Failed pattern match at Data.Map line 74, column 3 - line 74, column 20: " + [ v.constructor.name, v1.constructor.name ]);
+      };
+  });
   var fromZipper = function (__copy_dictOrd) {
       return function (__copy_v) {
           return function (__copy_tree) {
@@ -6564,9 +5843,9 @@ var PS = {};
                           tree = __tco_tree;
                           continue tco;
                       };
-                      throw new Error("Failed pattern match at Data.Map line 237, column 3 - line 242, column 88: " + [ v.value0.constructor.name ]);
+                      throw new Error("Failed pattern match at Data.Map line 240, column 3 - line 245, column 88: " + [ v.value0.constructor.name ]);
                   };
-                  throw new Error("Failed pattern match at Data.Map line 235, column 1 - line 235, column 27: " + [ v.constructor.name, tree.constructor.name ]);
+                  throw new Error("Failed pattern match at Data.Map line 238, column 1 - line 238, column 27: " + [ v.constructor.name, tree.constructor.name ]);
               };
           };
       };
@@ -6608,9 +5887,9 @@ var PS = {};
                           v1 = __tco_v1;
                           continue tco;
                       };
-                      throw new Error("Failed pattern match at Data.Map line 273, column 5 - line 278, column 104: " + [ v.value0.constructor.name, v1.constructor.name ]);
+                      throw new Error("Failed pattern match at Data.Map line 276, column 5 - line 281, column 104: " + [ v.value0.constructor.name, v1.constructor.name ]);
                   };
-                  throw new Error("Failed pattern match at Data.Map line 271, column 3 - line 271, column 54: " + [ v.constructor.name, v1.constructor.name ]);
+                  throw new Error("Failed pattern match at Data.Map line 274, column 3 - line 274, column 54: " + [ v.constructor.name, v1.constructor.name ]);
               };
           };
       };
@@ -6628,11 +5907,11 @@ var PS = {};
                               return up(ctx)(new KickUp(Leaf.value, k, v, Leaf.value));
                           };
                           if (v1 instanceof Two) {
-                              var $305 = comp(k)(v1.value1);
-                              if ($305 instanceof Data_Ordering.EQ) {
+                              var $317 = comp(k)(v1.value1);
+                              if ($317 instanceof Data_Ordering.EQ) {
                                   return fromZipper(dictOrd)(ctx)(new Two(v1.value0, k, v, v1.value3));
                               };
-                              if ($305 instanceof Data_Ordering.LT) {
+                              if ($317 instanceof Data_Ordering.LT) {
                                   var __tco_ctx = new Data_List_Types.Cons(new TwoLeft(v1.value1, v1.value2, v1.value3), ctx);
                                   var __tco_k = k;
                                   var __tco_v = v;
@@ -6654,15 +5933,15 @@ var PS = {};
                               continue tco;
                           };
                           if (v1 instanceof Three) {
-                              var $310 = comp(k)(v1.value1);
-                              if ($310 instanceof Data_Ordering.EQ) {
+                              var $322 = comp(k)(v1.value1);
+                              if ($322 instanceof Data_Ordering.EQ) {
                                   return fromZipper(dictOrd)(ctx)(new Three(v1.value0, k, v, v1.value3, v1.value4, v1.value5, v1.value6));
                               };
-                              var $312 = comp(k)(v1.value4);
-                              if ($312 instanceof Data_Ordering.EQ) {
+                              var $324 = comp(k)(v1.value4);
+                              if ($324 instanceof Data_Ordering.EQ) {
                                   return fromZipper(dictOrd)(ctx)(new Three(v1.value0, v1.value1, v1.value2, v1.value3, k, v, v1.value6));
                               };
-                              if ($310 instanceof Data_Ordering.LT) {
+                              if ($322 instanceof Data_Ordering.LT) {
                                   var __tco_ctx = new Data_List_Types.Cons(new ThreeLeft(v1.value1, v1.value2, v1.value3, v1.value4, v1.value5, v1.value6), ctx);
                                   var __tco_k = k;
                                   var __tco_v = v;
@@ -6673,7 +5952,7 @@ var PS = {};
                                   v1 = __tco_v1;
                                   continue tco;
                               };
-                              if ($310 instanceof Data_Ordering.GT && $312 instanceof Data_Ordering.LT) {
+                              if ($322 instanceof Data_Ordering.GT && $324 instanceof Data_Ordering.LT) {
                                   var __tco_ctx = new Data_List_Types.Cons(new ThreeMiddle(v1.value0, v1.value1, v1.value2, v1.value4, v1.value5, v1.value6), ctx);
                                   var __tco_k = k;
                                   var __tco_v = v;
@@ -6694,7 +5973,7 @@ var PS = {};
                               v1 = __tco_v1;
                               continue tco;
                           };
-                          throw new Error("Failed pattern match at Data.Map line 254, column 3 - line 254, column 52: " + [ ctx.constructor.name, k.constructor.name, v.constructor.name, v1.constructor.name ]);
+                          throw new Error("Failed pattern match at Data.Map line 257, column 3 - line 257, column 52: " + [ ctx.constructor.name, k.constructor.name, v.constructor.name, v1.constructor.name ]);
                       };
                   };
               };
@@ -6702,6 +5981,240 @@ var PS = {};
       };
       return down(Data_List_Types.Nil.value);
   };
+  var pop = function (dictOrd) {
+      var up = function (ctxs) {
+          return function (tree) {
+              if (ctxs instanceof Data_List_Types.Nil) {
+                  return tree;
+              };
+              if (ctxs instanceof Data_List_Types.Cons) {
+                  var __unused = function (dictPartial1) {
+                      return function ($dollar51) {
+                          return $dollar51;
+                      };
+                  };
+                  return __unused()((function () {
+                      if (ctxs.value0 instanceof TwoLeft && (ctxs.value0.value2 instanceof Leaf && tree instanceof Leaf)) {
+                          return fromZipper(dictOrd)(ctxs.value1)(new Two(Leaf.value, ctxs.value0.value0, ctxs.value0.value1, Leaf.value));
+                      };
+                      if (ctxs.value0 instanceof TwoRight && (ctxs.value0.value0 instanceof Leaf && tree instanceof Leaf)) {
+                          return fromZipper(dictOrd)(ctxs.value1)(new Two(Leaf.value, ctxs.value0.value1, ctxs.value0.value2, Leaf.value));
+                      };
+                      if (ctxs.value0 instanceof TwoLeft && ctxs.value0.value2 instanceof Two) {
+                          return up(ctxs.value1)(new Three(tree, ctxs.value0.value0, ctxs.value0.value1, ctxs.value0.value2.value0, ctxs.value0.value2.value1, ctxs.value0.value2.value2, ctxs.value0.value2.value3));
+                      };
+                      if (ctxs.value0 instanceof TwoRight && ctxs.value0.value0 instanceof Two) {
+                          return up(ctxs.value1)(new Three(ctxs.value0.value0.value0, ctxs.value0.value0.value1, ctxs.value0.value0.value2, ctxs.value0.value0.value3, ctxs.value0.value1, ctxs.value0.value2, tree));
+                      };
+                      if (ctxs.value0 instanceof TwoLeft && ctxs.value0.value2 instanceof Three) {
+                          return fromZipper(dictOrd)(ctxs.value1)(new Two(new Two(tree, ctxs.value0.value0, ctxs.value0.value1, ctxs.value0.value2.value0), ctxs.value0.value2.value1, ctxs.value0.value2.value2, new Two(ctxs.value0.value2.value3, ctxs.value0.value2.value4, ctxs.value0.value2.value5, ctxs.value0.value2.value6)));
+                      };
+                      if (ctxs.value0 instanceof TwoRight && ctxs.value0.value0 instanceof Three) {
+                          return fromZipper(dictOrd)(ctxs.value1)(new Two(new Two(ctxs.value0.value0.value0, ctxs.value0.value0.value1, ctxs.value0.value0.value2, ctxs.value0.value0.value3), ctxs.value0.value0.value4, ctxs.value0.value0.value5, new Two(ctxs.value0.value0.value6, ctxs.value0.value1, ctxs.value0.value2, tree)));
+                      };
+                      if (ctxs.value0 instanceof ThreeLeft && (ctxs.value0.value2 instanceof Leaf && (ctxs.value0.value5 instanceof Leaf && tree instanceof Leaf))) {
+                          return fromZipper(dictOrd)(ctxs.value1)(new Three(Leaf.value, ctxs.value0.value0, ctxs.value0.value1, Leaf.value, ctxs.value0.value3, ctxs.value0.value4, Leaf.value));
+                      };
+                      if (ctxs.value0 instanceof ThreeMiddle && (ctxs.value0.value0 instanceof Leaf && (ctxs.value0.value5 instanceof Leaf && tree instanceof Leaf))) {
+                          return fromZipper(dictOrd)(ctxs.value1)(new Three(Leaf.value, ctxs.value0.value1, ctxs.value0.value2, Leaf.value, ctxs.value0.value3, ctxs.value0.value4, Leaf.value));
+                      };
+                      if (ctxs.value0 instanceof ThreeRight && (ctxs.value0.value0 instanceof Leaf && (ctxs.value0.value3 instanceof Leaf && tree instanceof Leaf))) {
+                          return fromZipper(dictOrd)(ctxs.value1)(new Three(Leaf.value, ctxs.value0.value1, ctxs.value0.value2, Leaf.value, ctxs.value0.value4, ctxs.value0.value5, Leaf.value));
+                      };
+                      if (ctxs.value0 instanceof ThreeLeft && ctxs.value0.value2 instanceof Two) {
+                          return fromZipper(dictOrd)(ctxs.value1)(new Two(new Three(tree, ctxs.value0.value0, ctxs.value0.value1, ctxs.value0.value2.value0, ctxs.value0.value2.value1, ctxs.value0.value2.value2, ctxs.value0.value2.value3), ctxs.value0.value3, ctxs.value0.value4, ctxs.value0.value5));
+                      };
+                      if (ctxs.value0 instanceof ThreeMiddle && ctxs.value0.value0 instanceof Two) {
+                          return fromZipper(dictOrd)(ctxs.value1)(new Two(new Three(ctxs.value0.value0.value0, ctxs.value0.value0.value1, ctxs.value0.value0.value2, ctxs.value0.value0.value3, ctxs.value0.value1, ctxs.value0.value2, tree), ctxs.value0.value3, ctxs.value0.value4, ctxs.value0.value5));
+                      };
+                      if (ctxs.value0 instanceof ThreeMiddle && ctxs.value0.value5 instanceof Two) {
+                          return fromZipper(dictOrd)(ctxs.value1)(new Two(ctxs.value0.value0, ctxs.value0.value1, ctxs.value0.value2, new Three(tree, ctxs.value0.value3, ctxs.value0.value4, ctxs.value0.value5.value0, ctxs.value0.value5.value1, ctxs.value0.value5.value2, ctxs.value0.value5.value3)));
+                      };
+                      if (ctxs.value0 instanceof ThreeRight && ctxs.value0.value3 instanceof Two) {
+                          return fromZipper(dictOrd)(ctxs.value1)(new Two(ctxs.value0.value0, ctxs.value0.value1, ctxs.value0.value2, new Three(ctxs.value0.value3.value0, ctxs.value0.value3.value1, ctxs.value0.value3.value2, ctxs.value0.value3.value3, ctxs.value0.value4, ctxs.value0.value5, tree)));
+                      };
+                      if (ctxs.value0 instanceof ThreeLeft && ctxs.value0.value2 instanceof Three) {
+                          return fromZipper(dictOrd)(ctxs.value1)(new Three(new Two(tree, ctxs.value0.value0, ctxs.value0.value1, ctxs.value0.value2.value0), ctxs.value0.value2.value1, ctxs.value0.value2.value2, new Two(ctxs.value0.value2.value3, ctxs.value0.value2.value4, ctxs.value0.value2.value5, ctxs.value0.value2.value6), ctxs.value0.value3, ctxs.value0.value4, ctxs.value0.value5));
+                      };
+                      if (ctxs.value0 instanceof ThreeMiddle && ctxs.value0.value0 instanceof Three) {
+                          return fromZipper(dictOrd)(ctxs.value1)(new Three(new Two(ctxs.value0.value0.value0, ctxs.value0.value0.value1, ctxs.value0.value0.value2, ctxs.value0.value0.value3), ctxs.value0.value0.value4, ctxs.value0.value0.value5, new Two(ctxs.value0.value0.value6, ctxs.value0.value1, ctxs.value0.value2, tree), ctxs.value0.value3, ctxs.value0.value4, ctxs.value0.value5));
+                      };
+                      if (ctxs.value0 instanceof ThreeMiddle && ctxs.value0.value5 instanceof Three) {
+                          return fromZipper(dictOrd)(ctxs.value1)(new Three(ctxs.value0.value0, ctxs.value0.value1, ctxs.value0.value2, new Two(tree, ctxs.value0.value3, ctxs.value0.value4, ctxs.value0.value5.value0), ctxs.value0.value5.value1, ctxs.value0.value5.value2, new Two(ctxs.value0.value5.value3, ctxs.value0.value5.value4, ctxs.value0.value5.value5, ctxs.value0.value5.value6)));
+                      };
+                      if (ctxs.value0 instanceof ThreeRight && ctxs.value0.value3 instanceof Three) {
+                          return fromZipper(dictOrd)(ctxs.value1)(new Three(ctxs.value0.value0, ctxs.value0.value1, ctxs.value0.value2, new Two(ctxs.value0.value3.value0, ctxs.value0.value3.value1, ctxs.value0.value3.value2, ctxs.value0.value3.value3), ctxs.value0.value3.value4, ctxs.value0.value3.value5, new Two(ctxs.value0.value3.value6, ctxs.value0.value4, ctxs.value0.value5, tree)));
+                      };
+                      throw new Error("Failed pattern match at Data.Map line 326, column 9 - line 343, column 136: " + [ ctxs.value0.constructor.name, tree.constructor.name ]);
+                  })());
+              };
+              throw new Error("Failed pattern match at Data.Map line 323, column 5 - line 343, column 136: " + [ ctxs.constructor.name ]);
+          };
+      };
+      var removeMaxNode = function (ctx) {
+          return function (m) {
+              var __unused = function (dictPartial1) {
+                  return function ($dollar53) {
+                      return $dollar53;
+                  };
+              };
+              return __unused()((function () {
+                  if (m instanceof Two && (m.value0 instanceof Leaf && m.value3 instanceof Leaf)) {
+                      return up(ctx)(Leaf.value);
+                  };
+                  if (m instanceof Two) {
+                      return removeMaxNode(new Data_List_Types.Cons(new TwoRight(m.value0, m.value1, m.value2), ctx))(m.value3);
+                  };
+                  if (m instanceof Three && (m.value0 instanceof Leaf && (m.value3 instanceof Leaf && m.value6 instanceof Leaf))) {
+                      return up(new Data_List_Types.Cons(new TwoRight(Leaf.value, m.value1, m.value2), ctx))(Leaf.value);
+                  };
+                  if (m instanceof Three) {
+                      return removeMaxNode(new Data_List_Types.Cons(new ThreeRight(m.value0, m.value1, m.value2, m.value3, m.value4, m.value5), ctx))(m.value6);
+                  };
+                  throw new Error("Failed pattern match at Data.Map line 355, column 5 - line 359, column 107: " + [ m.constructor.name ]);
+              })());
+          };
+      };
+      var maxNode = function (m) {
+          var __unused = function (dictPartial1) {
+              return function ($dollar55) {
+                  return $dollar55;
+              };
+          };
+          return __unused()((function () {
+              if (m instanceof Two && m.value3 instanceof Leaf) {
+                  return {
+                      key: m.value1, 
+                      value: m.value2
+                  };
+              };
+              if (m instanceof Two) {
+                  return maxNode(m.value3);
+              };
+              if (m instanceof Three && m.value6 instanceof Leaf) {
+                  return {
+                      key: m.value4, 
+                      value: m.value5
+                  };
+              };
+              if (m instanceof Three) {
+                  return maxNode(m.value6);
+              };
+              throw new Error("Failed pattern match at Data.Map line 346, column 33 - line 350, column 45: " + [ m.constructor.name ]);
+          })());
+      };
+      var comp = Data_Ord.compare(dictOrd);
+      var down = function (__copy_ctx) {
+          return function (__copy_k) {
+              return function (__copy_m) {
+                  var ctx = __copy_ctx;
+                  var k = __copy_k;
+                  var m = __copy_m;
+                  tco: while (true) {
+                      if (m instanceof Leaf) {
+                          return Data_Maybe.Nothing.value;
+                      };
+                      if (m instanceof Two) {
+                          var $535 = comp(k)(m.value1);
+                          if (m.value3 instanceof Leaf && $535 instanceof Data_Ordering.EQ) {
+                              return new Data_Maybe.Just(new Data_Tuple.Tuple(m.value2, up(ctx)(Leaf.value)));
+                          };
+                          if ($535 instanceof Data_Ordering.EQ) {
+                              var max = maxNode(m.value0);
+                              return new Data_Maybe.Just(new Data_Tuple.Tuple(m.value2, removeMaxNode(new Data_List_Types.Cons(new TwoLeft(max.key, max.value, m.value3), ctx))(m.value0)));
+                          };
+                          if ($535 instanceof Data_Ordering.LT) {
+                              var __tco_ctx = new Data_List_Types.Cons(new TwoLeft(m.value1, m.value2, m.value3), ctx);
+                              var __tco_k = k;
+                              var __tco_m = m.value0;
+                              ctx = __tco_ctx;
+                              k = __tco_k;
+                              m = __tco_m;
+                              continue tco;
+                          };
+                          var __tco_ctx = new Data_List_Types.Cons(new TwoRight(m.value0, m.value1, m.value2), ctx);
+                          var __tco_k = k;
+                          var __tco_m = m.value3;
+                          ctx = __tco_ctx;
+                          k = __tco_k;
+                          m = __tco_m;
+                          continue tco;
+                      };
+                      if (m instanceof Three) {
+                          var leaves = (function () {
+                              if (m.value0 instanceof Leaf && (m.value3 instanceof Leaf && m.value6 instanceof Leaf)) {
+                                  return true;
+                              };
+                              return false;
+                          })();
+                          var $544 = comp(k)(m.value1);
+                          var $545 = comp(k)(m.value4);
+                          if (leaves && $544 instanceof Data_Ordering.EQ) {
+                              return new Data_Maybe.Just(new Data_Tuple.Tuple(m.value2, fromZipper(dictOrd)(ctx)(new Two(Leaf.value, m.value4, m.value5, Leaf.value))));
+                          };
+                          if (leaves && $545 instanceof Data_Ordering.EQ) {
+                              return new Data_Maybe.Just(new Data_Tuple.Tuple(m.value5, fromZipper(dictOrd)(ctx)(new Two(Leaf.value, m.value1, m.value2, Leaf.value))));
+                          };
+                          if ($544 instanceof Data_Ordering.EQ) {
+                              var max = maxNode(m.value0);
+                              return new Data_Maybe.Just(new Data_Tuple.Tuple(m.value2, removeMaxNode(new Data_List_Types.Cons(new ThreeLeft(max.key, max.value, m.value3, m.value4, m.value5, m.value6), ctx))(m.value0)));
+                          };
+                          if ($545 instanceof Data_Ordering.EQ) {
+                              var max = maxNode(m.value3);
+                              return new Data_Maybe.Just(new Data_Tuple.Tuple(m.value5, removeMaxNode(new Data_List_Types.Cons(new ThreeMiddle(m.value0, m.value1, m.value2, max.key, max.value, m.value6), ctx))(m.value3)));
+                          };
+                          if ($544 instanceof Data_Ordering.LT) {
+                              var __tco_ctx = new Data_List_Types.Cons(new ThreeLeft(m.value1, m.value2, m.value3, m.value4, m.value5, m.value6), ctx);
+                              var __tco_k = k;
+                              var __tco_m = m.value0;
+                              ctx = __tco_ctx;
+                              k = __tco_k;
+                              m = __tco_m;
+                              continue tco;
+                          };
+                          if ($544 instanceof Data_Ordering.GT && $545 instanceof Data_Ordering.LT) {
+                              var __tco_ctx = new Data_List_Types.Cons(new ThreeMiddle(m.value0, m.value1, m.value2, m.value4, m.value5, m.value6), ctx);
+                              var __tco_k = k;
+                              var __tco_m = m.value3;
+                              ctx = __tco_ctx;
+                              k = __tco_k;
+                              m = __tco_m;
+                              continue tco;
+                          };
+                          var __tco_ctx = new Data_List_Types.Cons(new ThreeRight(m.value0, m.value1, m.value2, m.value3, m.value4, m.value5), ctx);
+                          var __tco_k = k;
+                          var __tco_m = m.value6;
+                          ctx = __tco_ctx;
+                          k = __tco_k;
+                          m = __tco_m;
+                          continue tco;
+                      };
+                      throw new Error("Failed pattern match at Data.Map line 296, column 36 - line 319, column 82: " + [ m.constructor.name ]);
+                  };
+              };
+          };
+      };
+      return down(Data_List_Types.Nil.value);
+  };
+  var foldableMap = new Data_Foldable.Foldable(function (dictMonoid) {
+      return function (f) {
+          return function (m) {
+              return Data_Foldable.foldMap(Data_List_Types.foldableList)(dictMonoid)(f)(values(m));
+          };
+      };
+  }, function (f) {
+      return function (z) {
+          return function (m) {
+              return Data_Foldable.foldl(Data_List_Types.foldableList)(f)(z)(values(m));
+          };
+      };
+  }, function (f) {
+      return function (z) {
+          return function (m) {
+              return Data_Foldable.foldr(Data_List_Types.foldableList)(f)(z)(values(m));
+          };
+      };
+  });
   var empty = Leaf.value;
   var fromFoldable = function (dictOrd) {
       return function (dictFoldable) {
@@ -6712,491 +6225,800 @@ var PS = {};
           })(empty);
       };
   };
+  var $$delete = function (dictOrd) {
+      return function (k) {
+          return function (m) {
+              return Data_Maybe.maybe(m)(Data_Tuple.snd)(pop(dictOrd)(k)(m));
+          };
+      };
+  };
+  exports["delete"] = $$delete;
   exports["empty"] = empty;
   exports["fromFoldable"] = fromFoldable;
   exports["insert"] = insert;
+  exports["keys"] = keys;
   exports["lookup"] = lookup;
+  exports["member"] = member;
+  exports["pop"] = pop;
+  exports["values"] = values;
+  exports["functorMap"] = functorMap;
+  exports["foldableMap"] = foldableMap;
 })(PS["Data.Map"] = PS["Data.Map"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Control_Coroutine_Aff = PS["Control.Coroutine.Aff"];
-  var Control_Coroutine_Stalling = PS["Control.Coroutine.Stalling"];
-  var Control_Monad_Aff_AVar = PS["Control.Monad.Aff.AVar"];
-  var Control_Monad_Aff_Free = PS["Control.Monad.Aff.Free"];
-  var Control_Monad_Eff = PS["Control.Monad.Eff"];
-  var Control_Monad_Free = PS["Control.Monad.Free"];
-  var Control_Monad_Free_Trans = PS["Control.Monad.Free.Trans"];
-  var Control_Monad_Rec_Class = PS["Control.Monad.Rec.Class"];
-  var Data_Const = PS["Data.Const"];
-  var Data_Either = PS["Data.Either"];
-  var Data_Functor_Coproduct = PS["Data.Functor.Coproduct"];
-  var Data_Maybe = PS["Data.Maybe"];
-  var Unsafe_Coerce = PS["Unsafe.Coerce"];
-  var Control_Semigroupoid = PS["Control.Semigroupoid"];
-  var Control_Coroutine = PS["Control.Coroutine"];
-  var Data_Function = PS["Data.Function"];
-  var Control_Bind = PS["Control.Bind"];               
-  var runEventSource = function (v) {
-      return v;
-  };
-  exports["runEventSource"] = runEventSource;
-})(PS["Halogen.Query.EventSource"] = PS["Halogen.Query.EventSource"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Control_Monad_State = PS["Control.Monad.State"];
-  var Data_Functor = PS["Data.Functor"];
-  var Control_Semigroupoid = PS["Control.Semigroupoid"];
-  var Control_Bind = PS["Control.Bind"];
-  var Control_Monad_State_Class = PS["Control.Monad.State.Class"];
-  var Control_Applicative = PS["Control.Applicative"];        
-  var Get = (function () {
-      function Get(value0) {
-          this.value0 = value0;
-      };
-      Get.create = function (value0) {
-          return new Get(value0);
-      };
-      return Get;
-  })();
-  var Modify = (function () {
-      function Modify(value0, value1) {
-          this.value0 = value0;
-          this.value1 = value1;
-      };
-      Modify.create = function (value0) {
-          return function (value1) {
-              return new Modify(value0, value1);
-          };
-      };
-      return Modify;
-  })();
-  var stateN = function (dictMonad) {
-      return function (dictMonadState) {
-          return function (v) {
-              if (v instanceof Get) {
-                  return Control_Bind.bind(dictMonad["__superclass_Control.Bind.Bind_1"]())(Control_Monad_State_Class.get(dictMonadState))(function ($22) {
-                      return Control_Applicative.pure(dictMonad["__superclass_Control.Applicative.Applicative_0"]())(v.value0($22));
-                  });
-              };
-              if (v instanceof Modify) {
-                  return Data_Functor.voidLeft(((dictMonad["__superclass_Control.Bind.Bind_1"]())["__superclass_Control.Apply.Apply_0"]())["__superclass_Data.Functor.Functor_0"]())(Control_Monad_State_Class.modify(dictMonadState)(v.value0))(v.value1);
-              };
-              throw new Error("Failed pattern match at Halogen.Query.StateF line 31, column 1 - line 31, column 40: " + [ v.constructor.name ]);
-          };
-      };
-  };
-  var functorStateF = new Data_Functor.Functor(function (f) {
-      return function (v) {
-          if (v instanceof Get) {
-              return new Get(function ($24) {
-                  return f(v.value0($24));
-              });
-          };
-          if (v instanceof Modify) {
-              return new Modify(v.value0, f(v.value1));
-          };
-          throw new Error("Failed pattern match at Halogen.Query.StateF line 19, column 3 - line 19, column 32: " + [ f.constructor.name, v.constructor.name ]);
-      };
-  });
-  exports["Get"] = Get;
-  exports["Modify"] = Modify;
-  exports["stateN"] = stateN;
-  exports["functorStateF"] = functorStateF;
-})(PS["Halogen.Query.StateF"] = PS["Halogen.Query.StateF"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Control_Alt = PS["Control.Alt"];
-  var Control_Monad_Aff_Free = PS["Control.Monad.Aff.Free"];
-  var Control_Monad_Free_Trans = PS["Control.Monad.Free.Trans"];
-  var Control_Plus = PS["Control.Plus"];
-  var Data_Bifunctor = PS["Data.Bifunctor"];
-  var Data_Maybe = PS["Data.Maybe"];
-  var Halogen_Query_EventSource = PS["Halogen.Query.EventSource"];
-  var Halogen_Query_StateF = PS["Halogen.Query.StateF"];
-  var Data_Functor = PS["Data.Functor"];
-  var Control_Semigroupoid = PS["Control.Semigroupoid"];
-  var Control_Coroutine_Stalling = PS["Control.Coroutine.Stalling"];        
-  var Pending = (function () {
-      function Pending() {
-
-      };
-      Pending.value = new Pending();
-      return Pending;
-  })();
-  var StateHF = (function () {
-      function StateHF(value0) {
-          this.value0 = value0;
-      };
-      StateHF.create = function (value0) {
-          return new StateHF(value0);
-      };
-      return StateHF;
-  })();
-  var SubscribeHF = (function () {
-      function SubscribeHF(value0, value1) {
-          this.value0 = value0;
-          this.value1 = value1;
-      };
-      SubscribeHF.create = function (value0) {
-          return function (value1) {
-              return new SubscribeHF(value0, value1);
-          };
-      };
-      return SubscribeHF;
-  })();
-  var QueryHF = (function () {
-      function QueryHF(value0) {
-          this.value0 = value0;
-      };
-      QueryHF.create = function (value0) {
-          return new QueryHF(value0);
-      };
-      return QueryHF;
-  })();
-  var RenderHF = (function () {
-      function RenderHF(value0, value1) {
-          this.value0 = value0;
-          this.value1 = value1;
-      };
-      RenderHF.create = function (value0) {
-          return function (value1) {
-              return new RenderHF(value0, value1);
-          };
-      };
-      return RenderHF;
-  })();
-  var RenderPendingHF = (function () {
-      function RenderPendingHF(value0) {
-          this.value0 = value0;
-      };
-      RenderPendingHF.create = function (value0) {
-          return new RenderPendingHF(value0);
-      };
-      return RenderPendingHF;
-  })();
-  var HaltHF = (function () {
-      function HaltHF(value0) {
-          this.value0 = value0;
-      };
-      HaltHF.create = function (value0) {
-          return new HaltHF(value0);
-      };
-      return HaltHF;
-  })();
-  var functorHalogenF = function (dictFunctor) {
-      return new Data_Functor.Functor(function (f) {
-          return function (h) {
-              if (h instanceof StateHF) {
-                  return new StateHF(Data_Functor.map(Halogen_Query_StateF.functorStateF)(f)(h.value0));
-              };
-              if (h instanceof SubscribeHF) {
-                  return new SubscribeHF(h.value0, f(h.value1));
-              };
-              if (h instanceof QueryHF) {
-                  return new QueryHF(Data_Functor.map(dictFunctor)(f)(h.value0));
-              };
-              if (h instanceof RenderHF) {
-                  return new RenderHF(h.value0, f(h.value1));
-              };
-              if (h instanceof RenderPendingHF) {
-                  return new RenderPendingHF(Data_Functor.map(Data_Functor.functorFn)(f)(h.value0));
-              };
-              if (h instanceof HaltHF) {
-                  return new HaltHF(h.value0);
-              };
-              throw new Error("Failed pattern match at Halogen.Query.HalogenF line 37, column 5 - line 43, column 31: " + [ h.constructor.name ]);
-          };
-      });
-  };
-  exports["StateHF"] = StateHF;
-  exports["SubscribeHF"] = SubscribeHF;
-  exports["QueryHF"] = QueryHF;
-  exports["RenderHF"] = RenderHF;
-  exports["RenderPendingHF"] = RenderPendingHF;
-  exports["HaltHF"] = HaltHF;
-  exports["Pending"] = Pending;
-  exports["functorHalogenF"] = functorHalogenF;
-})(PS["Halogen.Query.HalogenF"] = PS["Halogen.Query.HalogenF"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Control_Monad_Free = PS["Control.Monad.Free"];
-  var Halogen_Query_HalogenF = PS["Halogen.Query.HalogenF"];
-  var Unsafe_Coerce = PS["Unsafe.Coerce"];
-  var Control_Semigroupoid = PS["Control.Semigroupoid"];        
-  var PostRender = (function () {
-      function PostRender(value0) {
-          this.value0 = value0;
-      };
-      PostRender.create = function (value0) {
-          return new PostRender(value0);
-      };
-      return PostRender;
-  })();
-  var Finalized = (function () {
-      function Finalized(value0) {
-          this.value0 = value0;
-      };
-      Finalized.create = function (value0) {
-          return new Finalized(value0);
-      };
-      return Finalized;
-  })();
-  var FinalizedF = (function () {
-      function FinalizedF(value0, value1, value2) {
-          this.value0 = value0;
-          this.value1 = value1;
-          this.value2 = value2;
-      };
-      FinalizedF.create = function (value0) {
-          return function (value1) {
-              return function (value2) {
-                  return new FinalizedF(value0, value1, value2);
-              };
-          };
-      };
-      return FinalizedF;
-  })();
-  var runFinalized = function (k) {
-      return function (f) {
-          var $6 = Unsafe_Coerce.unsafeCoerce(f);
-          return k($6.value0)($6.value1)($6.value2);
-      };
-  };
-  var finalized = function (e) {
-      return function (s) {
-          return function (i) {
-              return Unsafe_Coerce.unsafeCoerce(new FinalizedF(e, s, i));
-          };
-      };
-  };
-  exports["PostRender"] = PostRender;
-  exports["Finalized"] = Finalized;
-  exports["finalized"] = finalized;
-  exports["runFinalized"] = runFinalized;
-})(PS["Halogen.Component.Hook"] = PS["Halogen.Component.Hook"] || {});
 (function(exports) {
   /* global exports */
   "use strict";
 
-  // module Halogen.HTML.Events.Handler
+  // module Data.StrMap
 
-  exports.preventDefaultImpl = function (e) {
+  exports._copyEff = function (m) {
     return function () {
-      e.preventDefault();
+      var r = {};
+      for (var k in m) {
+        if (hasOwnProperty.call(m, k)) {
+          r[k] = m[k];
+        }
+      }
+      return r;
     };
   };
 
-  exports.stopPropagationImpl = function (e) {
-    return function () {
-      e.stopPropagation();
-    };
+  exports.empty = {};
+
+  exports.runST = function (f) {
+    return f;
   };
 
-  exports.stopImmediatePropagationImpl = function (e) {
-    return function () {
-      e.stopImmediatePropagation();
-    };
+  // jshint maxparams: 4
+  exports._lookup = function (no, yes, k, m) {
+    return k in m ? yes(m[k]) : no;
   };
-})(PS["Halogen.HTML.Events.Handler"] = PS["Halogen.HTML.Events.Handler"] || {});
+
+  function _collect(f) {
+    return function (m) {
+      var r = [];
+      for (var k in m) {
+        if (hasOwnProperty.call(m, k)) {
+          r.push(f(k)(m[k]));
+        }
+      }
+      return r;
+    };
+  }
+})(PS["Data.StrMap"] = PS["Data.StrMap"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  /* global exports */
   "use strict";
-  var $foreign = PS["Halogen.HTML.Events.Handler"];
+
+  // module Data.StrMap.ST
+
+  exports["new"] = function () {
+    return {};
+  };
+
+  exports.poke = function (m) {
+    return function (k) {
+      return function (v) {
+        return function () {
+          m[k] = v;
+          return m;
+        };
+      };
+    };
+  };
+
+  exports["delete"] = function (m) {
+    return function (k) {
+      return function () {
+        delete m[k];
+        return m;
+      };
+    };
+  };
+})(PS["Data.StrMap.ST"] = PS["Data.StrMap.ST"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var $foreign = PS["Data.StrMap.ST"];
+  var Control_Monad_Eff = PS["Control.Monad.Eff"];
+  var Control_Monad_ST = PS["Control.Monad.ST"];
+  var Data_Maybe = PS["Data.Maybe"];
+  exports["delete"] = $foreign["delete"];
+  exports["new"] = $foreign["new"];
+  exports["poke"] = $foreign.poke;
+})(PS["Data.StrMap.ST"] = PS["Data.StrMap.ST"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var $foreign = PS["Data.StrMap"];
   var Prelude = PS["Prelude"];
   var Control_Monad_Eff = PS["Control.Monad.Eff"];
-  var Control_Monad_Eff_Class = PS["Control.Monad.Eff.Class"];
-  var Control_Monad_Writer = PS["Control.Monad.Writer"];
-  var Control_Monad_Writer_Class = PS["Control.Monad.Writer.Class"];
+  var Control_Monad_ST = PS["Control.Monad.ST"];
   var Data_Foldable = PS["Data.Foldable"];
+  var Data_Function_Uncurried = PS["Data.Function.Uncurried"];
+  var Data_List = PS["Data.List"];
+  var Data_Maybe = PS["Data.Maybe"];
+  var Data_Monoid = PS["Data.Monoid"];
+  var Data_StrMap_ST = PS["Data.StrMap.ST"];
+  var Data_Traversable = PS["Data.Traversable"];
   var Data_Tuple = PS["Data.Tuple"];
-  var DOM = PS["DOM"];
-  var Halogen_HTML_Events_Types = PS["Halogen.HTML.Events.Types"];
+  var Data_Unfoldable = PS["Data.Unfoldable"];
   var Data_Functor = PS["Data.Functor"];
+  var Data_Function = PS["Data.Function"];
   var Control_Apply = PS["Control.Apply"];
   var Control_Applicative = PS["Control.Applicative"];
+  var Control_Category = PS["Control.Category"];
+  var Data_Eq = PS["Data.Eq"];
+  var Data_HeytingAlgebra = PS["Data.HeytingAlgebra"];
+  var Data_Show = PS["Data.Show"];
+  var Data_Semigroup = PS["Data.Semigroup"];
   var Control_Semigroupoid = PS["Control.Semigroupoid"];
+  var Data_List_Types = PS["Data.List.Types"];
   var Control_Bind = PS["Control.Bind"];
-  var Control_Monad = PS["Control.Monad"];
-  var Control_Monad_Writer_Trans = PS["Control.Monad.Writer.Trans"];
-  var Data_Monoid = PS["Data.Monoid"];
-  var Data_Identity = PS["Data.Identity"];
-  var Data_Function = PS["Data.Function"];
-  var Data_Semigroup = PS["Data.Semigroup"];        
-  var PreventDefault = (function () {
-      function PreventDefault() {
-
+  var thawST = $foreign._copyEff;
+  var pureST = function (f) {
+      return Control_Monad_Eff.runPure($foreign.runST(f));
+  };
+  var mutate = function (f) {
+      return function (m) {
+          return pureST(function __do() {
+              var v = thawST(m)();
+              var v1 = f(v)();
+              return v;
+          });
       };
-      PreventDefault.value = new PreventDefault();
-      return PreventDefault;
-  })();
-  var StopPropagation = (function () {
-      function StopPropagation() {
-
+  };
+  var lookup = Data_Function_Uncurried.runFn4($foreign._lookup)(Data_Maybe.Nothing.value)(Data_Maybe.Just.create);
+  var insert = function (k) {
+      return function (v) {
+          return mutate(function (s) {
+              return Data_Functor["void"](Control_Monad_Eff.functorEff)(Data_StrMap_ST.poke(s)(k)(v));
+          });
       };
-      StopPropagation.value = new StopPropagation();
-      return StopPropagation;
-  })();
-  var StopImmediatePropagation = (function () {
-      function StopImmediatePropagation() {
-
+  };
+  var $$delete = function (k) {
+      return mutate(function (s) {
+          return Data_Functor["void"](Control_Monad_Eff.functorEff)(Data_StrMap_ST["delete"](s)(k));
+      });
+  };
+  var alter = function (f) {
+      return function (k) {
+          return function (m) {
+              var $41 = f(lookup(k)(m));
+              if ($41 instanceof Data_Maybe.Nothing) {
+                  return $$delete(k)(m);
+              };
+              if ($41 instanceof Data_Maybe.Just) {
+                  return insert(k)($41.value0)(m);
+              };
+              throw new Error("Failed pattern match at Data.StrMap line 184, column 15 - line 186, column 25: " + [ $41.constructor.name ]);
+          };
       };
-      StopImmediatePropagation.value = new StopImmediatePropagation();
-      return StopImmediatePropagation;
-  })();
-  var EventHandler = function (x) {
-      return x;
-  };                                                                                                                                                                                                    
-  var runEventHandler = function (dictMonad) {
-      return function (dictMonadEff) {
-          return function (e) {
-              return function (v) {
-                  var applyUpdate = function (v1) {
-                      if (v1 instanceof PreventDefault) {
-                          return $foreign.preventDefaultImpl(e);
-                      };
-                      if (v1 instanceof StopPropagation) {
-                          return $foreign.stopPropagationImpl(e);
-                      };
-                      if (v1 instanceof StopImmediatePropagation) {
-                          return $foreign.stopImmediatePropagationImpl(e);
-                      };
-                      throw new Error("Failed pattern match at Halogen.HTML.Events.Handler line 88, column 3 - line 88, column 63: " + [ v1.constructor.name ]);
-                  };
-                  var $13 = Control_Monad_Writer.runWriter(v);
-                  return Control_Monad_Eff_Class.liftEff(dictMonadEff)(Control_Apply.applySecond(Control_Monad_Eff.applyEff)(Data_Foldable.for_(Control_Monad_Eff.applicativeEff)(Data_Foldable.foldableArray)($13.value1)(applyUpdate))(Control_Applicative.pure(Control_Monad_Eff.applicativeEff)($13.value0)));
+  };
+  exports["alter"] = alter;
+  exports["insert"] = insert;
+  exports["lookup"] = lookup;
+  exports["pureST"] = pureST;
+  exports["thawST"] = thawST;
+  exports["empty"] = $foreign.empty;
+})(PS["Data.StrMap"] = PS["Data.StrMap"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Data_Eq = PS["Data.Eq"];
+  var Data_Ord = PS["Data.Ord"];        
+  var OrdBox = (function () {
+      function OrdBox(value0, value1, value2) {
+          this.value0 = value0;
+          this.value1 = value1;
+          this.value2 = value2;
+      };
+      OrdBox.create = function (value0) {
+          return function (value1) {
+              return function (value2) {
+                  return new OrdBox(value0, value1, value2);
               };
           };
       };
-  };                                                                                                                                                                                
-  var functorEventHandler = new Data_Functor.Functor(function (f) {
-      return function (v) {
-          return Data_Functor.map(Control_Monad_Writer_Trans.functorWriterT(Data_Identity.functorIdentity))(f)(v);
+      return OrdBox;
+  })();
+  var unOrdBox = function (v) {
+      return v.value2;
+  };
+  var mkOrdBox = function (dictOrd) {
+      return OrdBox.create(Data_Eq.eq(dictOrd["__superclass_Data.Eq.Eq_0"]()))(Data_Ord.compare(dictOrd));
+  };
+  var eqOrdBox = new Data_Eq.Eq(function (v) {
+      return function (v1) {
+          return v.value0(v.value2)(v1.value2);
       };
   });
-  var applyEventHandler = new Control_Apply.Apply(function () {
-      return functorEventHandler;
+  var ordOrdBox = new Data_Ord.Ord(function () {
+      return eqOrdBox;
   }, function (v) {
       return function (v1) {
-          return Control_Apply.apply(Control_Monad_Writer_Trans.applyWriterT(Data_Semigroup.semigroupArray)(Data_Identity.applyIdentity))(v)(v1);
+          return v.value1(v.value2)(v1.value2);
       };
   });
-  var applicativeEventHandler = new Control_Applicative.Applicative(function () {
-      return applyEventHandler;
-  }, function ($23) {
-      return EventHandler(Control_Applicative.pure(Control_Monad_Writer_Trans.applicativeWriterT(Data_Monoid.monoidArray)(Data_Identity.applicativeIdentity))($23));
-  });
-  exports["runEventHandler"] = runEventHandler;
-  exports["functorEventHandler"] = functorEventHandler;
-  exports["applyEventHandler"] = applyEventHandler;
-  exports["applicativeEventHandler"] = applicativeEventHandler;
-})(PS["Halogen.HTML.Events.Handler"] = PS["Halogen.HTML.Events.Handler"] || {});
+  exports["mkOrdBox"] = mkOrdBox;
+  exports["unOrdBox"] = unOrdBox;
+  exports["eqOrdBox"] = eqOrdBox;
+  exports["ordOrdBox"] = ordOrdBox;
+})(PS["Halogen.Data.OrdBox"] = PS["Halogen.Data.OrdBox"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Data_Bifunctor = PS["Data.Bifunctor"];
-  var Data_Exists = PS["Data.Exists"];
-  var Data_ExistsR = PS["Data.ExistsR"];
+  var Data_Foreign = PS["Data.Foreign"];
   var Data_Maybe = PS["Data.Maybe"];
-  var Data_Traversable = PS["Data.Traversable"];
+  var Data_Newtype = PS["Data.Newtype"];
+  var Data_Eq = PS["Data.Eq"];
+  var Data_Ord = PS["Data.Ord"];
+  var Data_Functor = PS["Data.Functor"];
+  var RefUpdate = (function () {
+      function RefUpdate(value0, value1, value2) {
+          this.value0 = value0;
+          this.value1 = value1;
+          this.value2 = value2;
+      };
+      RefUpdate.create = function (value0) {
+          return function (value1) {
+              return function (value2) {
+                  return new RefUpdate(value0, value1, value2);
+              };
+          };
+      };
+      return RefUpdate;
+  })();
+  var Query = (function () {
+      function Query(value0) {
+          this.value0 = value0;
+      };
+      Query.create = function (value0) {
+          return new Query(value0);
+      };
+      return Query;
+  })();                             
+  var bifunctorInputF = new Data_Bifunctor.Bifunctor(function (f) {
+      return function (g) {
+          return function (v) {
+              if (v instanceof RefUpdate) {
+                  return new RefUpdate(v.value0, v.value1, f(v.value2));
+              };
+              if (v instanceof Query) {
+                  return new Query(g(v.value0));
+              };
+              throw new Error("Failed pattern match at Halogen.Query.InputF line 21, column 15 - line 23, column 27: " + [ v.constructor.name ]);
+          };
+      };
+  });
+  var functorInputF = new Data_Functor.Functor(Data_Bifunctor.rmap(bifunctorInputF));
+  exports["RefUpdate"] = RefUpdate;
+  exports["Query"] = Query;
+  exports["bifunctorInputF"] = bifunctorInputF;
+  exports["functorInputF"] = functorInputF;
+})(PS["Halogen.Query.InputF"] = PS["Halogen.Query.InputF"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Data_Bifunctor = PS["Data.Bifunctor"];
+  var Data_Generic = PS["Data.Generic"];
+  var Data_Maybe = PS["Data.Maybe"];
+  var Data_Newtype = PS["Data.Newtype"];
   var Data_Tuple = PS["Data.Tuple"];
-  var DOM_HTML_Types = PS["DOM.HTML.Types"];
-  var Halogen_HTML_Events_Handler = PS["Halogen.HTML.Events.Handler"];
-  var Halogen_HTML_Events_Types = PS["Halogen.HTML.Events.Types"];
+  var Unsafe_Coerce = PS["Unsafe.Coerce"];
+  var Data_Functor = PS["Data.Functor"];
+  var Control_Category = PS["Control.Category"];
+  var Control_Semigroupoid = PS["Control.Semigroupoid"];
+  var Data_Eq = PS["Data.Eq"];
+  var Data_HeytingAlgebra = PS["Data.HeytingAlgebra"];
+  var Data_Ord = PS["Data.Ord"];
+  var Data_Ordering = PS["Data.Ordering"];
+  var Control_Apply = PS["Control.Apply"];
+  var Data_Unit = PS["Data.Unit"];
+  var ElemSpec = (function () {
+      function ElemSpec(value0, value1, value2) {
+          this.value0 = value0;
+          this.value1 = value1;
+          this.value2 = value2;
+      };
+      ElemSpec.create = function (value0) {
+          return function (value1) {
+              return function (value2) {
+                  return new ElemSpec(value0, value1, value2);
+              };
+          };
+      };
+      return ElemSpec;
+  })();
+  var Text = (function () {
+      function Text(value0) {
+          this.value0 = value0;
+      };
+      Text.create = function (value0) {
+          return new Text(value0);
+      };
+      return Text;
+  })();
+  var Elem = (function () {
+      function Elem(value0, value1) {
+          this.value0 = value0;
+          this.value1 = value1;
+      };
+      Elem.create = function (value0) {
+          return function (value1) {
+              return new Elem(value0, value1);
+          };
+      };
+      return Elem;
+  })();
+  var Keyed = (function () {
+      function Keyed(value0, value1) {
+          this.value0 = value0;
+          this.value1 = value1;
+      };
+      Keyed.create = function (value0) {
+          return function (value1) {
+              return new Keyed(value0, value1);
+          };
+      };
+      return Keyed;
+  })();
+  var Widget = (function () {
+      function Widget(value0) {
+          this.value0 = value0;
+      };
+      Widget.create = function (value0) {
+          return new Widget(value0);
+      };
+      return Widget;
+  })();
+  var Grafted = (function () {
+      function Grafted(value0) {
+          this.value0 = value0;
+      };
+      Grafted.create = function (value0) {
+          return new Grafted(value0);
+      };
+      return Grafted;
+  })();
+  var Graft = (function () {
+      function Graft(value0, value1, value2) {
+          this.value0 = value0;
+          this.value1 = value1;
+          this.value2 = value2;
+      };
+      Graft.create = function (value0) {
+          return function (value1) {
+              return function (value2) {
+                  return new Graft(value0, value1, value2);
+              };
+          };
+      };
+      return Graft;
+  })();
+  var unGraft = function (f) {
+      return function ($120) {
+          return f(Unsafe_Coerce.unsafeCoerce($120));
+      };
+  };           
+  var graft = Unsafe_Coerce.unsafeCoerce;
+  var functorElemSpec = new Data_Functor.Functor(function (f) {
+      return function (v) {
+          return new ElemSpec(v.value0, v.value1, f(v.value2));
+      };
+  });                                
+  var eqElemName = Data_Eq.eqString;
+  var bifunctorGraft = new Data_Bifunctor.Bifunctor(function (f) {
+      return function (g) {
+          return unGraft(function (v) {
+              return graft(new Graft(function ($122) {
+                  return f(v.value0($122));
+              }, function ($123) {
+                  return g(v.value1($123));
+              }, v.value2));
+          });
+      };
+  });
+  var bifunctorVDom = new Data_Bifunctor.Bifunctor(function (f) {
+      return function (g) {
+          return function (v) {
+              if (v instanceof Text) {
+                  return new Text(v.value0);
+              };
+              if (v instanceof Grafted) {
+                  return new Grafted(Data_Bifunctor.bimap(bifunctorGraft)(f)(g)(v.value0));
+              };
+              return new Grafted(graft(new Graft(f, g, v)));
+          };
+      };
+  });
+  var runGraft = unGraft(function (v) {
+      var go = function (v2) {
+          if (v2 instanceof Text) {
+              return new Text(v2.value0);
+          };
+          if (v2 instanceof Elem) {
+              return new Elem(Data_Functor.map(functorElemSpec)(v.value0)(v2.value0), Data_Functor.map(Data_Functor.functorArray)(go)(v2.value1));
+          };
+          if (v2 instanceof Keyed) {
+              return new Keyed(Data_Functor.map(functorElemSpec)(v.value0)(v2.value0), Data_Functor.map(Data_Functor.functorArray)(Data_Functor.map(Data_Tuple.functorTuple)(go))(v2.value1));
+          };
+          if (v2 instanceof Widget) {
+              return new Widget(v.value1(v2.value0));
+          };
+          if (v2 instanceof Grafted) {
+              return new Grafted(Data_Bifunctor.bimap(bifunctorGraft)(v.value0)(v.value1)(v2.value0));
+          };
+          throw new Error("Failed pattern match at Halogen.VDom.Types line 74, column 5 - line 81, column 11: " + [ v2.constructor.name ]);
+      };
+      return go(v.value2);
+  });
+  exports["ElemSpec"] = ElemSpec;
+  exports["Graft"] = Graft;
+  exports["Text"] = Text;
+  exports["Elem"] = Elem;
+  exports["Keyed"] = Keyed;
+  exports["Widget"] = Widget;
+  exports["Grafted"] = Grafted;
+  exports["graft"] = graft;
+  exports["runGraft"] = runGraft;
+  exports["unGraft"] = unGraft;
+  exports["bifunctorVDom"] = bifunctorVDom;
+  exports["bifunctorGraft"] = bifunctorGraft;
+  exports["functorElemSpec"] = functorElemSpec;
+  exports["eqElemName"] = eqElemName;
+})(PS["Halogen.VDom.Types"] = PS["Halogen.VDom.Types"] || {});
+(function(exports) {
+    "use strict";
+
+  exports.unsafeGetAny = function (key, obj) {
+    return obj[key];
+  };
+
+  exports.unsafeHasAny = function (key, obj) {
+    return obj.hasOwnProperty(key);
+  };
+
+  exports.unsafeSetAny = function (key, val, obj) {
+    return function () {
+      obj[key] = val;
+    };
+  };
+
+  exports.forE = function (a, f) {
+    return function () {
+      var b = [];
+      for (var i = 0; i < a.length; i++) {
+        b.push(f(i, a[i])());
+      }
+      return b;
+    };
+  };
+
+  exports.forInE = function (o, f) {
+    return function () {
+      var ks = Object.keys(o);
+      for (var i = 0; i < ks.length; i++) {
+        var k = ks[i];
+        f(k, o[k])();
+      }
+    };
+  };
+
+  exports.diffWithIxE = function (a1, a2, f1, f2, f3) {
+    return function () {
+      var a3 = [];
+      var l1 = a1.length;
+      var l2 = a2.length;
+      var i  = 0;
+      while (1) {
+        if (i < l1) {
+          if (i < l2) {
+            a3.push(f1(i, a1[i], a2[i])());
+          } else {
+            f2(i, a1[i])();
+          }
+        } else if (i < l2) {
+          a3.push(f3(i, a2[i])());
+        } else {
+          break;
+        }
+        i++;
+      }
+      return a3;
+    };
+  };
+
+  exports.strMapWithIxE = function (as, fk, f) {
+    return function () {
+      var o = {};
+      for (var i = 0; i < as.length; i++) {
+        var a = as[i];
+        var k = fk(a);
+        o[k] = f(k, i, a)();
+      }
+      return o;
+    };
+  };
+
+  exports.diffWithKeyAndIxE = function (o1, as, fk, f1, f2, f3) {
+    return function () {
+      var o2 = {};
+      for (var i = 0; i < as.length; i++) {
+        var a = as[i];
+        var k = fk(a);
+        if (o1.hasOwnProperty(k)) {
+          o2[k] = f1(k, i, o1[k], a)();
+        } else {
+          o2[k] = f3(k, i, a)();
+        }
+      }
+      for (var k in o1) {
+        if (k in o2) {
+          continue;
+        }
+        f2(k, o1[k])();
+      }
+      return o2;
+    };
+  };
+
+  exports.refEq = function (a, b) {
+    return a === b;
+  };
+
+  exports.createTextNode = function (s, doc) {
+    return function () {
+      return doc.createTextNode(s);
+    };
+  };
+
+  exports.setTextContent = function (s, n) {
+    return function () {
+      n.textContent = s;
+    };
+  };
+
+  exports.createElement = function (ns, name, doc) {
+    return function () {
+      if (ns != null) {
+        return doc.createElementNS(ns, name);
+      } else {
+        return doc.createElement(name)
+      }
+    };
+  };
+
+  exports.insertChildIx = function (i, a, b) {
+    return function () {
+      var n = b.childNodes.item(i) || null;
+      if (n !== a) {
+        b.insertBefore(a, n);
+      }
+    };
+  };
+
+  exports.removeChild = function (a, b) {
+    return function () {
+      if (b && a.parentNode === b) {
+        b.removeChild(a);
+      }
+    };
+  };
+
+  exports.unsafeParent = function (a) {
+    return a.parentNode;
+  };
+
+  exports.setAttribute = function (ns, attr, val, el) {
+    return function () {
+      if (ns != null) {
+        el.setAttributeNS(ns, attr, val);
+      } else {
+        el.setAttribute(attr, val);
+      }
+    };
+  };
+
+  exports.removeAttribute = function (ns, attr, el) {
+    return function () {
+      if (ns != null) {
+        el.removeAttributeNS(ns, attr);
+      } else {
+        el.removeAttribute(attr);
+      }
+    };
+  };
+
+  exports.addEventListener = function (ev, listener, el) {
+    return function () {
+      el.addEventListener(ev, listener, false);
+    };
+  };
+
+  exports.removeEventListener = function (ev, listener, el) {
+    return function () {
+      el.removeEventListener(ev, listener, false);
+    };
+  };
+
+  exports.jsUndefined = void 0;
+})(PS["Halogen.VDom.Util"] = PS["Halogen.VDom.Util"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var $foreign = PS["Halogen.VDom.Util"];
+  var Prelude = PS["Prelude"];
+  var Control_Monad_Eff = PS["Control.Monad.Eff"];
+  var Control_Monad_Eff_Ref = PS["Control.Monad.Eff.Ref"];
+  var Data_Function_Uncurried = PS["Data.Function.Uncurried"];
+  var Data_Nullable = PS["Data.Nullable"];
+  var Data_StrMap = PS["Data.StrMap"];
+  var Data_StrMap_ST = PS["Data.StrMap.ST"];
+  var DOM = PS["DOM"];
+  var DOM_Event_EventTarget = PS["DOM.Event.EventTarget"];
+  var DOM_Node_Types = PS["DOM.Node.Types"];
+  var Halogen_VDom_Types = PS["Halogen.VDom.Types"];
+  var Unsafe_Coerce = PS["Unsafe.Coerce"];
+  var Control_Applicative = PS["Control.Applicative"];
+  var Data_Unit = PS["Data.Unit"];        
+  var unsafeLookup = $foreign.unsafeGetAny;
+  var unsafeFreeze = Unsafe_Coerce.unsafeCoerce;
+  var pokeMutMap = $foreign.unsafeSetAny;
+  var newMutMap = Unsafe_Coerce.unsafeCoerce(Data_StrMap_ST["new"]);
+  var effUnit = Control_Applicative.pure(Control_Monad_Eff.applicativeEff)(Data_Unit.unit);
+  var effPure = Control_Applicative.pure(Control_Monad_Eff.applicativeEff);
+  exports["effPure"] = effPure;
+  exports["effUnit"] = effUnit;
+  exports["newMutMap"] = newMutMap;
+  exports["pokeMutMap"] = pokeMutMap;
+  exports["unsafeFreeze"] = unsafeFreeze;
+  exports["unsafeLookup"] = unsafeLookup;
+  exports["addEventListener"] = $foreign.addEventListener;
+  exports["createElement"] = $foreign.createElement;
+  exports["createTextNode"] = $foreign.createTextNode;
+  exports["diffWithIxE"] = $foreign.diffWithIxE;
+  exports["diffWithKeyAndIxE"] = $foreign.diffWithKeyAndIxE;
+  exports["forE"] = $foreign.forE;
+  exports["forInE"] = $foreign.forInE;
+  exports["insertChildIx"] = $foreign.insertChildIx;
+  exports["jsUndefined"] = $foreign.jsUndefined;
+  exports["refEq"] = $foreign.refEq;
+  exports["removeAttribute"] = $foreign.removeAttribute;
+  exports["removeChild"] = $foreign.removeChild;
+  exports["removeEventListener"] = $foreign.removeEventListener;
+  exports["setAttribute"] = $foreign.setAttribute;
+  exports["setTextContent"] = $foreign.setTextContent;
+  exports["strMapWithIxE"] = $foreign.strMapWithIxE;
+  exports["unsafeGetAny"] = $foreign.unsafeGetAny;
+  exports["unsafeHasAny"] = $foreign.unsafeHasAny;
+  exports["unsafeParent"] = $foreign.unsafeParent;
+  exports["unsafeSetAny"] = $foreign.unsafeSetAny;
+})(PS["Halogen.VDom.Util"] = PS["Halogen.VDom.Util"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Data_Tuple = PS["Data.Tuple"];
   var Data_Functor = PS["Data.Functor"];
   var Control_Semigroupoid = PS["Control.Semigroupoid"];
-  var Data_Show = PS["Data.Show"];
-  var Data_Function = PS["Data.Function"];
-  var Control_Applicative = PS["Control.Applicative"];        
-  var TagName = function (x) {
-      return x;
-  };
-  var PropName = function (x) {
-      return x;
-  };
-  var EventName = function (x) {
-      return x;
-  };
-  var HandlerF = (function () {
-      function HandlerF(value0, value1) {
-          this.value0 = value0;
-          this.value1 = value1;
-      };
-      HandlerF.create = function (value0) {
-          return function (value1) {
-              return new HandlerF(value0, value1);
-          };
-      };
-      return HandlerF;
-  })();
-  var ClassName = function (x) {
-      return x;
-  };
-  var AttrName = function (x) {
-      return x;
-  };
-  var PropF = (function () {
-      function PropF(value0, value1, value2) {
+  var Control_Applicative = PS["Control.Applicative"];
+  var Data_Void = PS["Data.Void"];
+  var Data_Unit = PS["Data.Unit"];        
+  var Step = (function () {
+      function Step(value0, value1, value2) {
           this.value0 = value0;
           this.value1 = value1;
           this.value2 = value2;
       };
-      PropF.create = function (value0) {
+      Step.create = function (value0) {
           return function (value1) {
               return function (value2) {
-                  return new PropF(value0, value1, value2);
+                  return new Step(value0, value1, value2);
               };
           };
       };
-      return PropF;
+      return Step;
   })();
-  var Prop = (function () {
-      function Prop(value0) {
+  var step = function (v) {
+      return v.value1;
+  };
+  var halt = function (v) {
+      return v.value2;
+  };
+  var extract = function (v) {
+      return v.value0;
+  };
+  exports["Step"] = Step;
+  exports["extract"] = extract;
+  exports["halt"] = halt;
+  exports["step"] = step;
+})(PS["Halogen.VDom.Machine"] = PS["Halogen.VDom.Machine"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Control_Monad_Eff = PS["Control.Monad.Eff"];
+  var Control_Monad_Eff_Ref = PS["Control.Monad.Eff.Ref"];
+  var Data_Maybe = PS["Data.Maybe"];
+  var Data_StrMap = PS["Data.StrMap"];
+  var Data_Nullable = PS["Data.Nullable"];
+  var Data_Foreign = PS["Data.Foreign"];
+  var Data_Function_Uncurried = PS["Data.Function.Uncurried"];
+  var Data_Tuple = PS["Data.Tuple"];
+  var DOM = PS["DOM"];
+  var DOM_Event_EventTarget = PS["DOM.Event.EventTarget"];
+  var DOM_Event_Types = PS["DOM.Event.Types"];
+  var DOM_Node_Types = PS["DOM.Node.Types"];
+  var Halogen_VDom = PS["Halogen.VDom"];
+  var Halogen_VDom_Types = PS["Halogen.VDom.Types"];
+  var Halogen_VDom_Util = PS["Halogen.VDom.Util"];
+  var Unsafe_Coerce = PS["Unsafe.Coerce"];
+  var Data_Functor = PS["Data.Functor"];
+  var Data_Semigroup = PS["Data.Semigroup"];
+  var Data_Eq = PS["Data.Eq"];
+  var Control_Bind = PS["Control.Bind"];
+  var Control_Applicative = PS["Control.Applicative"];
+  var Data_HeytingAlgebra = PS["Data.HeytingAlgebra"];
+  var Halogen_VDom_Machine = PS["Halogen.VDom.Machine"];
+  var Data_Unit = PS["Data.Unit"];        
+  var Created = (function () {
+      function Created(value0) {
           this.value0 = value0;
       };
-      Prop.create = function (value0) {
-          return new Prop(value0);
+      Created.create = function (value0) {
+          return new Created(value0);
       };
-      return Prop;
+      return Created;
   })();
-  var Attr = (function () {
-      function Attr(value0, value1, value2) {
+  var Removed = (function () {
+      function Removed(value0) {
+          this.value0 = value0;
+      };
+      Removed.create = function (value0) {
+          return new Removed(value0);
+      };
+      return Removed;
+  })();
+  var Attribute = (function () {
+      function Attribute(value0, value1, value2) {
           this.value0 = value0;
           this.value1 = value1;
           this.value2 = value2;
       };
-      Attr.create = function (value0) {
+      Attribute.create = function (value0) {
           return function (value1) {
               return function (value2) {
-                  return new Attr(value0, value1, value2);
+                  return new Attribute(value0, value1, value2);
               };
           };
       };
-      return Attr;
+      return Attribute;
   })();
-  var Key = (function () {
-      function Key(value0) {
+  var Property = (function () {
+      function Property(value0, value1) {
           this.value0 = value0;
+          this.value1 = value1;
       };
-      Key.create = function (value0) {
-          return new Key(value0);
+      Property.create = function (value0) {
+          return function (value1) {
+              return new Property(value0, value1);
+          };
       };
-      return Key;
+      return Property;
   })();
   var Handler = (function () {
-      function Handler(value0) {
+      function Handler(value0, value1) {
           this.value0 = value0;
+          this.value1 = value1;
       };
       Handler.create = function (value0) {
-          return new Handler(value0);
+          return function (value1) {
+              return new Handler(value0, value1);
+          };
       };
       return Handler;
   })();
@@ -7209,1376 +7031,1361 @@ var PS = {};
       };
       return Ref;
   })();
-  var Text = (function () {
-      function Text(value0) {
+  var unsafeGetProperty = Halogen_VDom_Util.unsafeGetAny;
+  var setProperty = Halogen_VDom_Util.unsafeSetAny;
+  var removeProperty = function (key, el) {
+      var $14 = Data_Foreign.typeOf(Halogen_VDom_Util.unsafeGetAny(key, el));
+      if ($14 === "string") {
+          return Halogen_VDom_Util.unsafeSetAny(key, "", el);
+      };
+      return Halogen_VDom_Util.unsafeSetAny(key, Halogen_VDom_Util.jsUndefined, el);
+  };
+  var propToStrKey = function (v) {
+      if (v instanceof Attribute && v.value0 instanceof Data_Maybe.Just) {
+          return "attr/" + (v.value0.value0 + (":" + v.value1));
+      };
+      if (v instanceof Attribute) {
+          return "attr/:" + v.value1;
+      };
+      if (v instanceof Property) {
+          return "prop/" + v.value0;
+      };
+      if (v instanceof Handler) {
+          return "handler/" + v.value0;
+      };
+      if (v instanceof Ref) {
+          return "ref";
+      };
+      throw new Error("Failed pattern match at Halogen.VDom.DOM.Prop line 179, column 16 - line 186, column 1: " + [ v.constructor.name ]);
+  };
+  var propFromString = Unsafe_Coerce.unsafeCoerce;
+  var propFromBoolean = Unsafe_Coerce.unsafeCoerce;
+  var functorProp = new Data_Functor.Functor(function (f) {
+      return function (v) {
+          if (v instanceof Handler) {
+              return new Handler(v.value0, Data_Functor.map(Data_Functor.functorFn)(Data_Functor.map(Data_Maybe.functorMaybe)(f))(v.value1));
+          };
+          if (v instanceof Ref) {
+              return new Ref(Data_Functor.map(Data_Functor.functorFn)(Data_Functor.map(Data_Maybe.functorMaybe)(f))(v.value0));
+          };
+          return Unsafe_Coerce.unsafeCoerce(v);
+      };
+  });
+  var buildProp = function (emit) {
+      return function (el) {
+          var removeProp = function (prevEvents) {
+              return function (v, v1) {
+                  if (v1 instanceof Attribute) {
+                      return Halogen_VDom_Util.removeAttribute(Data_Nullable.toNullable(v1.value0), v1.value1, el);
+                  };
+                  if (v1 instanceof Property) {
+                      return removeProperty(v1.value0, el);
+                  };
+                  if (v1 instanceof Handler) {
+                      var handler = Halogen_VDom_Util.unsafeLookup(v1.value0, prevEvents);
+                      return Halogen_VDom_Util.removeEventListener(v1.value0, Data_Tuple.fst(handler), el);
+                  };
+                  if (v1 instanceof Ref) {
+                      return Halogen_VDom_Util.effUnit;
+                  };
+                  throw new Error("Failed pattern match at Halogen.VDom.DOM.Prop line 166, column 5 - line 176, column 21: " + [ v1.constructor.name ]);
+              };
+          };
+          var mbEmit = Data_Maybe.maybe(Halogen_VDom_Util.effUnit)(emit);
+          var done = function (ps) {
+              var $47 = Data_StrMap.lookup("ref")(ps);
+              if ($47 instanceof Data_Maybe.Just && $47.value0 instanceof Ref) {
+                  return mbEmit($47.value0.value0(new Removed(el)));
+              };
+              return Halogen_VDom_Util.effUnit;
+          };
+          var diffProp = function (prevEvents, events) {
+              return function (v, v1, v11, v2) {
+                  if (v11 instanceof Attribute && v2 instanceof Attribute) {
+                      var $54 = v11.value2 !== v2.value2;
+                      if ($54) {
+                          return function __do() {
+                              Halogen_VDom_Util.setAttribute(Data_Nullable.toNullable(v2.value0), v2.value1, v2.value2, el)();
+                              return v2;
+                          };
+                      };
+                      return Halogen_VDom_Util.effPure(v2);
+                  };
+                  if (v11 instanceof Property && v2 instanceof Property) {
+                      var $61 = Halogen_VDom_Util.refEq(v11.value1, v2.value1);
+                      if ($61) {
+                          return Halogen_VDom_Util.effPure(v2);
+                      };
+                      if (v2.value0 === "value") {
+                          var elVal = unsafeGetProperty("value", el);
+                          var $63 = !Halogen_VDom_Util.refEq(elVal, v2.value1);
+                          if ($63) {
+                              return function __do() {
+                                  setProperty(v2.value0, v2.value1, el)();
+                                  return v2;
+                              };
+                          };
+                          return Halogen_VDom_Util.effPure(v2);
+                      };
+                      return function __do() {
+                          setProperty(v2.value0, v2.value1, el)();
+                          return v2;
+                      };
+                  };
+                  if (v11 instanceof Handler && v2 instanceof Handler) {
+                      var handler = Halogen_VDom_Util.unsafeLookup(v2.value0, prevEvents);
+                      return function __do() {
+                          Control_Monad_Eff_Ref.writeRef(Data_Tuple.snd(handler))(v2.value1)();
+                          Halogen_VDom_Util.pokeMutMap(v2.value0, handler, events)();
+                          return v2;
+                      };
+                  };
+                  return Halogen_VDom_Util.effPure(v2);
+              };
+          };
+          var applyProp = function (events) {
+              return function (v, v1, v2) {
+                  if (v2 instanceof Attribute) {
+                      return function __do() {
+                          Halogen_VDom_Util.setAttribute(Data_Nullable.toNullable(v2.value0), v2.value1, v2.value2, el)();
+                          return v2;
+                      };
+                  };
+                  if (v2 instanceof Property) {
+                      return function __do() {
+                          setProperty(v2.value0, v2.value1, el)();
+                          return v2;
+                      };
+                  };
+                  if (v2 instanceof Handler) {
+                      var $80 = Halogen_VDom_Util.unsafeGetAny(v2.value0, events);
+                      if (Halogen_VDom_Util.unsafeHasAny(v2.value0, events)) {
+                          return function __do() {
+                              Control_Monad_Eff_Ref.writeRef(Data_Tuple.snd($80))(v2.value1)();
+                              return v2;
+                          };
+                      };
+                      return function __do() {
+                          var v3 = Control_Monad_Eff_Ref.newRef(v2.value1)();
+                          var listener = DOM_Event_EventTarget.eventListener(function (ev) {
+                              return function __do() {
+                                  var v4 = Control_Monad_Eff_Ref.readRef(v3)();
+                                  return mbEmit(v4(ev))();
+                              };
+                          });
+                          Halogen_VDom_Util.pokeMutMap(v2.value0, new Data_Tuple.Tuple(listener, v3), events)();
+                          Halogen_VDom_Util.addEventListener(v2.value0, listener, el)();
+                          return v2;
+                      };
+                  };
+                  if (v2 instanceof Ref) {
+                      return function __do() {
+                          mbEmit(v2.value0(new Created(el)))();
+                          return v2;
+                      };
+                  };
+                  throw new Error("Failed pattern match at Halogen.VDom.DOM.Prop line 107, column 5 - line 130, column 15: " + [ v2.constructor.name ]);
+              };
+          };
+          var patch = function (prevEvents, ps1) {
+              return function (ps2) {
+                  return function __do() {
+                      var v = Halogen_VDom_Util.newMutMap();
+                      var onThis = removeProp(prevEvents);
+                      var onThese = diffProp(prevEvents, v);
+                      var onThat = applyProp(v);
+                      var v1 = Halogen_VDom_Util.diffWithKeyAndIxE(ps1, ps2, propToStrKey, onThese, onThis, onThat)();
+                      return new Halogen_VDom_Machine.Step(Data_Unit.unit, patch(Halogen_VDom_Util.unsafeFreeze(v), v1), done(v1));
+                  };
+              };
+          };
+          var render = function (ps1) {
+              return function __do() {
+                  var v = Halogen_VDom_Util.newMutMap();
+                  var v1 = Halogen_VDom_Util.strMapWithIxE(ps1, propToStrKey, applyProp(v))();
+                  return new Halogen_VDom_Machine.Step(Data_Unit.unit, patch(Halogen_VDom_Util.unsafeFreeze(v), v1), done(v1));
+              };
+          };
+          return render;
+      };
+  };
+  exports["Created"] = Created;
+  exports["Removed"] = Removed;
+  exports["Attribute"] = Attribute;
+  exports["Property"] = Property;
+  exports["Handler"] = Handler;
+  exports["Ref"] = Ref;
+  exports["buildProp"] = buildProp;
+  exports["propFromBoolean"] = propFromBoolean;
+  exports["propFromString"] = propFromString;
+  exports["functorProp"] = functorProp;
+})(PS["Halogen.VDom.DOM.Prop"] = PS["Halogen.VDom.DOM.Prop"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Data_Bifunctor = PS["Data.Bifunctor"];
+  var Data_Generic = PS["Data.Generic"];
+  var Data_Maybe = PS["Data.Maybe"];
+  var Data_MediaType = PS["Data.MediaType"];
+  var Data_Newtype = PS["Data.Newtype"];
+  var Data_Tuple = PS["Data.Tuple"];
+  var DOM_Node_Types = PS["DOM.Node.Types"];
+  var DOM_Event_Types = PS["DOM.Event.Types"];
+  var DOM_HTML_Indexed_ButtonType = PS["DOM.HTML.Indexed.ButtonType"];
+  var DOM_HTML_Indexed_CrossOriginValue = PS["DOM.HTML.Indexed.CrossOriginValue"];
+  var DOM_HTML_Indexed_DirValue = PS["DOM.HTML.Indexed.DirValue"];
+  var DOM_HTML_Indexed_FormMethod = PS["DOM.HTML.Indexed.FormMethod"];
+  var DOM_HTML_Indexed_InputType = PS["DOM.HTML.Indexed.InputType"];
+  var DOM_HTML_Indexed_KindValue = PS["DOM.HTML.Indexed.KindValue"];
+  var DOM_HTML_Indexed_MenuitemType = PS["DOM.HTML.Indexed.MenuitemType"];
+  var DOM_HTML_Indexed_MenuType = PS["DOM.HTML.Indexed.MenuType"];
+  var DOM_HTML_Indexed_OnOff = PS["DOM.HTML.Indexed.OnOff"];
+  var DOM_HTML_Indexed_OrderedListType = PS["DOM.HTML.Indexed.OrderedListType"];
+  var DOM_HTML_Indexed_PreloadValue = PS["DOM.HTML.Indexed.PreloadValue"];
+  var DOM_HTML_Indexed_ScopeValue = PS["DOM.HTML.Indexed.ScopeValue"];
+  var DOM_HTML_Indexed_StepValue = PS["DOM.HTML.Indexed.StepValue"];
+  var DOM_HTML_Indexed_WrapValue = PS["DOM.HTML.Indexed.WrapValue"];
+  var Halogen_Query_InputF = PS["Halogen.Query.InputF"];
+  var Halogen_VDom = PS["Halogen.VDom"];
+  var Halogen_VDom_DOM_Prop = PS["Halogen.VDom.DOM.Prop"];
+  var Unsafe_Coerce = PS["Unsafe.Coerce"];
+  var Data_Functor = PS["Data.Functor"];
+  var Control_Semigroupoid = PS["Control.Semigroupoid"];
+  var Data_Eq = PS["Data.Eq"];
+  var Data_Ord = PS["Data.Ord"];
+  var Control_Apply = PS["Control.Apply"];
+  var Data_Unit = PS["Data.Unit"];
+  var Halogen_VDom_Types = PS["Halogen.VDom.Types"];
+  var Data_Function = PS["Data.Function"];
+  var HTML = function (x) {
+      return x;
+  };
+  var ClassName = function (x) {
+      return x;
+  };
+  var IsProp = function (toPropValue) {
+      this.toPropValue = toPropValue;
+  }; 
+  var toPropValue = function (dict) {
+      return dict.toPropValue;
+  };
+  var text = function ($53) {
+      return HTML(Halogen_VDom_Types.Text.create($53));
+  };
+  var stringIsProp = new IsProp(Halogen_VDom_DOM_Prop.propFromString);
+  var prop = function (dictIsProp) {
+      return function (v) {
+          return function ($58) {
+              return Halogen_VDom_DOM_Prop.Property.create(v)(toPropValue(dictIsProp)($58));
+          };
+      };
+  };       
+  var newtypeClassName = new Data_Newtype.Newtype(function (n) {
+      return n;
+  }, ClassName);                                                
+  var inputTypeIsProp = new IsProp(function ($66) {
+      return Halogen_VDom_DOM_Prop.propFromString(DOM_HTML_Indexed_InputType.renderInputType($66));
+  });
+  var handler = Halogen_VDom_DOM_Prop.Handler.create;
+  var element = Unsafe_Coerce.unsafeCoerce(function (name) {
+      return function (props) {
+          return function (children) {
+              return new Halogen_VDom_Types.Elem(new Halogen_VDom_Types.ElemSpec(Data_Maybe.Nothing.value, name, props), children);
+          };
+      };
+  });
+  var booleanIsProp = new IsProp(Halogen_VDom_DOM_Prop.propFromBoolean);
+  var bifunctorHTML = new Data_Bifunctor.Bifunctor(function (f) {
+      return function (g) {
+          return function (v) {
+              return Data_Bifunctor.bimap(Halogen_VDom_Types.bifunctorVDom)(Data_Functor.map(Data_Functor.functorArray)(Data_Functor.map(Halogen_VDom_DOM_Prop.functorProp)(Data_Functor.map(Halogen_Query_InputF.functorInputF)(g))))(f)(v);
+          };
+      };
+  });
+  exports["ClassName"] = ClassName;
+  exports["HTML"] = HTML;
+  exports["IsProp"] = IsProp;
+  exports["element"] = element;
+  exports["handler"] = handler;
+  exports["prop"] = prop;
+  exports["text"] = text;
+  exports["toPropValue"] = toPropValue;
+  exports["bifunctorHTML"] = bifunctorHTML;
+  exports["stringIsProp"] = stringIsProp;
+  exports["booleanIsProp"] = booleanIsProp;
+  exports["inputTypeIsProp"] = inputTypeIsProp;
+  exports["newtypeClassName"] = newtypeClassName;
+})(PS["Halogen.HTML.Core"] = PS["Halogen.HTML.Core"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Control_Coroutine = PS["Control.Coroutine"];
+  var Control_Monad_Aff = PS["Control.Monad.Aff"];
+  var Control_Monad_Aff_AVar = PS["Control.Monad.Aff.AVar"];
+  var Control_Monad_Aff_Class = PS["Control.Monad.Aff.Class"];
+  var Control_Monad_Eff = PS["Control.Monad.Eff"];
+  var Control_Monad_Eff_Class = PS["Control.Monad.Eff.Class"];
+  var Control_Monad_Eff_Exception = PS["Control.Monad.Eff.Exception"];
+  var Control_Monad_Free_Trans = PS["Control.Monad.Free.Trans"];
+  var Control_Monad_Rec_Class = PS["Control.Monad.Rec.Class"];
+  var Control_Monad_Trans_Class = PS["Control.Monad.Trans.Class"];
+  var Data_Bifunctor = PS["Data.Bifunctor"];
+  var Data_Either = PS["Data.Either"];
+  var Data_Foldable = PS["Data.Foldable"];
+  var Data_Maybe = PS["Data.Maybe"];
+  var Data_Eq = PS["Data.Eq"];
+  var Data_Ord = PS["Data.Ord"];
+  var Data_Ordering = PS["Data.Ordering"];
+  var Control_Bind = PS["Control.Bind"];
+  var Data_Function = PS["Data.Function"];
+  var Control_Applicative = PS["Control.Applicative"];
+  var Control_Semigroupoid = PS["Control.Semigroupoid"];
+  var Data_Functor = PS["Data.Functor"];
+  var Data_Unit = PS["Data.Unit"];        
+  var Listening = (function () {
+      function Listening() {
+
+      };
+      Listening.value = new Listening();
+      return Listening;
+  })();
+  var Done = (function () {
+      function Done() {
+
+      };
+      Done.value = new Done();
+      return Done;
+  })();
+  var unEventSource = function (v) {
+      return v;
+  };
+  var eqSubscribeStatus = new Data_Eq.Eq(function (x) {
+      return function (y) {
+          if (x instanceof Listening && y instanceof Listening) {
+              return true;
+          };
+          if (x instanceof Done && y instanceof Done) {
+              return true;
+          };
+          return false;
+      };
+  });
+  exports["Listening"] = Listening;
+  exports["Done"] = Done;
+  exports["unEventSource"] = unEventSource;
+  exports["eqSubscribeStatus"] = eqSubscribeStatus;
+})(PS["Halogen.Query.EventSource"] = PS["Halogen.Query.EventSource"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Control_Monad_Aff = PS["Control.Monad.Aff"];
+  var Control_Monad_Eff_Exception = PS["Control.Monad.Eff.Exception"];
+  var Unsafe_Coerce = PS["Unsafe.Coerce"];
+  var Data_Functor = PS["Data.Functor"];
+  var Data_Function = PS["Data.Function"];
+  var Control_Category = PS["Control.Category"];
+  var unFork = Unsafe_Coerce.unsafeCoerce;
+  exports["unFork"] = unFork;
+})(PS["Halogen.Query.ForkF"] = PS["Halogen.Query.ForkF"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Control_Applicative_Free = PS["Control.Applicative.Free"];
+  var Control_Monad_Aff_Class = PS["Control.Monad.Aff.Class"];
+  var Control_Monad_Eff_Class = PS["Control.Monad.Eff.Class"];
+  var Control_Monad_Eff_Exception = PS["Control.Monad.Eff.Exception"];
+  var Control_Monad_Fork = PS["Control.Monad.Fork"];
+  var Control_Monad_Free = PS["Control.Monad.Free"];
+  var Control_Monad_Reader_Class = PS["Control.Monad.Reader.Class"];
+  var Control_Monad_Rec_Class = PS["Control.Monad.Rec.Class"];
+  var Control_Monad_State_Class = PS["Control.Monad.State.Class"];
+  var Control_Monad_Trans_Class = PS["Control.Monad.Trans.Class"];
+  var Control_Monad_Writer_Class = PS["Control.Monad.Writer.Class"];
+  var Control_Parallel_Class = PS["Control.Parallel.Class"];
+  var Data_Bifunctor = PS["Data.Bifunctor"];
+  var Data_Coyoneda = PS["Data.Coyoneda"];
+  var Data_Foreign = PS["Data.Foreign"];
+  var Data_List = PS["Data.List"];
+  var Data_Maybe = PS["Data.Maybe"];
+  var Data_Newtype = PS["Data.Newtype"];
+  var Data_Tuple = PS["Data.Tuple"];
+  var Halogen_Query_EventSource = PS["Halogen.Query.EventSource"];
+  var Halogen_Query_ForkF = PS["Halogen.Query.ForkF"];
+  var Halogen_Query_InputF = PS["Halogen.Query.InputF"];
+  var Data_Functor = PS["Data.Functor"];
+  var Control_Semigroupoid = PS["Control.Semigroupoid"];
+  var Control_Apply = PS["Control.Apply"];
+  var Control_Applicative = PS["Control.Applicative"];
+  var Control_Bind = PS["Control.Bind"];
+  var Control_Monad = PS["Control.Monad"];
+  var Data_Function = PS["Data.Function"];
+  var Control_Monad_Fork_Class = PS["Control.Monad.Fork.Class"];
+  var Data_Unit = PS["Data.Unit"];
+  var Control_Category = PS["Control.Category"];
+  var HalogenM = function (x) {
+      return x;
+  };
+  var State = (function () {
+      function State(value0) {
           this.value0 = value0;
       };
-      Text.create = function (value0) {
-          return new Text(value0);
+      State.create = function (value0) {
+          return new State(value0);
       };
-      return Text;
+      return State;
   })();
-  var Element = (function () {
-      function Element(value0, value1, value2, value3) {
+  var Subscribe = (function () {
+      function Subscribe(value0, value1) {
           this.value0 = value0;
           this.value1 = value1;
-          this.value2 = value2;
-          this.value3 = value3;
       };
-      Element.create = function (value0) {
+      Subscribe.create = function (value0) {
           return function (value1) {
-              return function (value2) {
-                  return function (value3) {
-                      return new Element(value0, value1, value2, value3);
+              return new Subscribe(value0, value1);
+          };
+      };
+      return Subscribe;
+  })();
+  var Lift = (function () {
+      function Lift(value0) {
+          this.value0 = value0;
+      };
+      Lift.create = function (value0) {
+          return new Lift(value0);
+      };
+      return Lift;
+  })();
+  var Halt = (function () {
+      function Halt(value0) {
+          this.value0 = value0;
+      };
+      Halt.create = function (value0) {
+          return new Halt(value0);
+      };
+      return Halt;
+  })();
+  var GetSlots = (function () {
+      function GetSlots(value0) {
+          this.value0 = value0;
+      };
+      GetSlots.create = function (value0) {
+          return new GetSlots(value0);
+      };
+      return GetSlots;
+  })();
+  var CheckSlot = (function () {
+      function CheckSlot(value0, value1) {
+          this.value0 = value0;
+          this.value1 = value1;
+      };
+      CheckSlot.create = function (value0) {
+          return function (value1) {
+              return new CheckSlot(value0, value1);
+          };
+      };
+      return CheckSlot;
+  })();
+  var ChildQuery = (function () {
+      function ChildQuery(value0, value1) {
+          this.value0 = value0;
+          this.value1 = value1;
+      };
+      ChildQuery.create = function (value0) {
+          return function (value1) {
+              return new ChildQuery(value0, value1);
+          };
+      };
+      return ChildQuery;
+  })();
+  var Raise = (function () {
+      function Raise(value0, value1) {
+          this.value0 = value0;
+          this.value1 = value1;
+      };
+      Raise.create = function (value0) {
+          return function (value1) {
+              return new Raise(value0, value1);
+          };
+      };
+      return Raise;
+  })();
+  var Par = (function () {
+      function Par(value0) {
+          this.value0 = value0;
+      };
+      Par.create = function (value0) {
+          return new Par(value0);
+      };
+      return Par;
+  })();
+  var Fork = (function () {
+      function Fork(value0) {
+          this.value0 = value0;
+      };
+      Fork.create = function (value0) {
+          return new Fork(value0);
+      };
+      return Fork;
+  })();
+  var GetRef = (function () {
+      function GetRef(value0, value1) {
+          this.value0 = value0;
+          this.value1 = value1;
+      };
+      GetRef.create = function (value0) {
+          return function (value1) {
+              return new GetRef(value0, value1);
+          };
+      };
+      return GetRef;
+  })();
+  var functorHalogenM = new Data_Functor.Functor(function (f) {
+      return function (v) {
+          return Data_Functor.map(Control_Monad_Free.freeFunctor)(f)(v);
+      };
+  });
+  var applyHalogenM = new Control_Apply.Apply(function () {
+      return functorHalogenM;
+  }, function (v) {
+      return function (v1) {
+          return Control_Apply.apply(Control_Monad_Free.freeApply)(v)(v1);
+      };
+  });
+  var bindHalogenM = new Control_Bind.Bind(function () {
+      return applyHalogenM;
+  }, function (v) {
+      return function (f) {
+          return Control_Bind.bind(Control_Monad_Free.freeBind)(v)(function (x) {
+              var $62 = f(x);
+              return $62;
+          });
+      };
+  });                                                       
+  var applicativeHalogenM = new Control_Applicative.Applicative(function () {
+      return applyHalogenM;
+  }, function (a) {
+      return Control_Applicative.pure(Control_Monad_Free.freeApplicative)(a);
+  });
+  var monadHalogenM = new Control_Monad.Monad(function () {
+      return applicativeHalogenM;
+  }, function () {
+      return bindHalogenM;
+  });
+  var monadStateHalogenM = new Control_Monad_State_Class.MonadState(function () {
+      return monadHalogenM;
+  }, function ($68) {
+      return HalogenM(Control_Monad_Free.liftF(State.create($68)));
+  });
+  exports["State"] = State;
+  exports["Subscribe"] = Subscribe;
+  exports["Lift"] = Lift;
+  exports["Halt"] = Halt;
+  exports["GetSlots"] = GetSlots;
+  exports["CheckSlot"] = CheckSlot;
+  exports["ChildQuery"] = ChildQuery;
+  exports["Raise"] = Raise;
+  exports["Par"] = Par;
+  exports["Fork"] = Fork;
+  exports["GetRef"] = GetRef;
+  exports["HalogenM"] = HalogenM;
+  exports["functorHalogenM"] = functorHalogenM;
+  exports["applyHalogenM"] = applyHalogenM;
+  exports["applicativeHalogenM"] = applicativeHalogenM;
+  exports["bindHalogenM"] = bindHalogenM;
+  exports["monadHalogenM"] = monadHalogenM;
+  exports["monadStateHalogenM"] = monadStateHalogenM;
+})(PS["Halogen.Query.HalogenM"] = PS["Halogen.Query.HalogenM"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Data_Bifunctor = PS["Data.Bifunctor"];
+  var Data_Const = PS["Data.Const"];
+  var Data_Maybe = PS["Data.Maybe"];
+  var Halogen_Data_OrdBox = PS["Halogen.Data.OrdBox"];
+  var Halogen_HTML_Core = PS["Halogen.HTML.Core"];
+  var Halogen_Query_HalogenM = PS["Halogen.Query.HalogenM"];
+  var Unsafe_Coerce = PS["Unsafe.Coerce"];
+  var Control_Semigroupoid = PS["Control.Semigroupoid"];
+  var Data_Functor = PS["Data.Functor"];
+  var Data_Ord = PS["Data.Ord"];
+  var unComponentSlot = function (f) {
+      return function (cs) {
+          var $8 = Unsafe_Coerce.unsafeCoerce(cs);
+          return f($8.value0)($8.value1)($8.value2)($8.value3)($8.value4)($8.value5);
+      };
+  };
+  var unComponent = Unsafe_Coerce.unsafeCoerce;                          
+  var mkComponent = Unsafe_Coerce.unsafeCoerce;
+  var lifecycleComponent = function (dictBifunctor) {
+      return function (spec) {
+          return mkComponent({
+              initialState: spec.initialState, 
+              render: Unsafe_Coerce.unsafeCoerce(spec.render), 
+              "eval": spec["eval"], 
+              receiver: spec.receiver, 
+              initializer: spec.initializer, 
+              finalizer: spec.finalizer, 
+              mkOrdBox: Halogen_Data_OrdBox.mkOrdBox(Data_Ord.ordVoid)
+          });
+      };
+  }; 
+  var component = function (dictBifunctor) {
+      return function (spec) {
+          return lifecycleComponent(dictBifunctor)({
+              initialState: spec.initialState, 
+              render: spec.render, 
+              "eval": spec["eval"], 
+              receiver: spec.receiver, 
+              initializer: Data_Maybe.Nothing.value, 
+              finalizer: Data_Maybe.Nothing.value
+          });
+      };
+  };
+  exports["component"] = component;
+  exports["lifecycleComponent"] = lifecycleComponent;
+  exports["mkComponent"] = mkComponent;
+  exports["unComponent"] = unComponent;
+  exports["unComponentSlot"] = unComponentSlot;
+})(PS["Halogen.Component"] = PS["Halogen.Component"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Control_Monad_Aff = PS["Control.Monad.Aff"];
+  var Control_Monad_Eff = PS["Control.Monad.Eff"];
+  var Control_Monad_Eff_Ref = PS["Control.Monad.Eff.Ref"];
+  var Data_Foreign = PS["Data.Foreign"];
+  var Data_List = PS["Data.List"];
+  var Data_Map = PS["Data.Map"];
+  var Data_Maybe = PS["Data.Maybe"];
+  var Data_StrMap = PS["Data.StrMap"];
+  var Data_Traversable = PS["Data.Traversable"];
+  var Halogen_Aff_Effects = PS["Halogen.Aff.Effects"];
+  var Halogen_Component = PS["Halogen.Component"];
+  var Halogen_Data_OrdBox = PS["Halogen.Data.OrdBox"];
+  var Unsafe_Coerce = PS["Unsafe.Coerce"];
+  var Data_Foldable = PS["Data.Foldable"];
+  var Control_Bind = PS["Control.Bind"];
+  var Data_Functor = PS["Data.Functor"];
+  var Data_List_Types = PS["Data.List.Types"];
+  var Data_Function = PS["Data.Function"];
+  var Control_Applicative = PS["Control.Applicative"];
+  var unRenderStateX = Unsafe_Coerce.unsafeCoerce;
+  var unDriverStateX = Unsafe_Coerce.unsafeCoerce;
+  var renderStateX_ = function (dictApplicative) {
+      return function (f) {
+          return unDriverStateX(function (st) {
+              return Data_Foldable.traverse_(dictApplicative)(Data_Foldable.foldableMaybe)(f)(st.rendering);
+          });
+      };
+  };
+  var mkRenderStateX = function (v) {
+      return Unsafe_Coerce.unsafeCoerce;
+  };
+  var renderStateX = function (dictFunctor) {
+      return function (f) {
+          return unDriverStateX(function (st) {
+              return mkRenderStateX(st.prjQuery)(f(st.rendering));
+          });
+      };
+  };
+  var mkDriverStateXRef = Unsafe_Coerce.unsafeCoerce;
+  var initDriverState = function (component) {
+      return function (input) {
+          return function (handler) {
+              return function (prjQuery) {
+                  return function (lchs) {
+                      return function __do() {
+                          var v = Control_Monad_Eff_Ref.newRef(Unsafe_Coerce.unsafeCoerce({}))();
+                          var v1 = Control_Monad_Eff_Ref.newRef(Data_Map.empty)();
+                          var v2 = Control_Monad_Eff_Ref.newRef(Data_Map.empty)();
+                          var v3 = Control_Monad_Eff_Ref.newRef(Data_Functor.voidLeft(Data_Maybe.functorMaybe)(component.initializer)(Data_List_Types.Nil.value))();
+                          var v4 = Control_Monad_Eff_Ref.newRef(new Data_Maybe.Just(Data_List_Types.Nil.value))();
+                          var v5 = Control_Monad_Eff_Ref.newRef(Data_Maybe.Nothing.value)();
+                          var v6 = Control_Monad_Eff_Ref.newRef(0)();
+                          var v7 = Control_Monad_Eff_Ref.newRef(new Data_Maybe.Just(Data_Map.empty))();
+                          var ds = {
+                              component: component, 
+                              state: component.initialState(input), 
+                              refs: Data_StrMap.empty, 
+                              children: Data_Map.empty, 
+                              childrenIn: v1, 
+                              childrenOut: v2, 
+                              selfRef: v, 
+                              handler: handler, 
+                              pendingQueries: v3, 
+                              pendingOuts: v4, 
+                              pendingHandlers: v5, 
+                              rendering: Data_Maybe.Nothing.value, 
+                              prjQuery: prjQuery, 
+                              fresh: v6, 
+                              subscriptions: v7, 
+                              lifecycleHandlers: lchs
+                          };
+                          Control_Monad_Eff_Ref.writeRef(v)(ds)();
+                          return mkDriverStateXRef(v);
+                      };
                   };
               };
           };
       };
-      return Element;
-  })();
-  var Slot = (function () {
-      function Slot(value0) {
-          this.value0 = value0;
-      };
-      Slot.create = function (value0) {
-          return new Slot(value0);
-      };
-      return Slot;
-  })();
-  var IsProp = function (toPropString) {
-      this.toPropString = toPropString;
   };
-  var toPropString = function (dict) {
-      return dict.toPropString;
-  };
-  var tagName = TagName;
-  var stringIsProp = new IsProp(function (v) {
-      return function (v1) {
-          return function (s) {
-              return s;
-          };
-      };
-  });
-  var runTagName = function (v) {
-      return v;
-  };
-  var runPropName = function (v) {
-      return v;
-  };
-  var runNamespace = function (v) {
-      return v;
-  };
-  var runEventName = function (v) {
-      return v;
-  };
-  var runClassName = function (v) {
-      return v;
-  };
-  var runAttrName = function (v) {
-      return v;
-  };
-  var propName = PropName;
-  var prop = function (dictIsProp) {
-      return function (name) {
-          return function (attr) {
-              return function (v) {
-                  return new Prop(Data_Exists.mkExists(new PropF(name, v, Data_Functor.map(Data_Maybe.functorMaybe)(Data_Function.flip(Data_Tuple.Tuple.create)(toPropString(dictIsProp)))(attr))));
-              };
-          };
-      };
-  }; 
-  var handler = function (name) {
-      return function (k) {
-          return new Handler(Data_ExistsR.mkExistsR(new HandlerF(name, k)));
-      };
-  };
-  var eventName = EventName;
-  var element = Element.create(Data_Maybe.Nothing.value);
-  var className = ClassName;
-  var booleanIsProp = new IsProp(function (v) {
-      return function (v1) {
-          return function (v2) {
-              if (v2) {
-                  return runAttrName(v);
-              };
-              if (!v2) {
-                  return "";
-              };
-              throw new Error("Failed pattern match at Halogen.HTML.Core line 138, column 3 - line 138, column 46: " + [ v.constructor.name, v1.constructor.name, v2.constructor.name ]);
-          };
-      };
-  });                                                                            
-  var attrName = AttrName;
-  exports["Text"] = Text;
-  exports["Element"] = Element;
-  exports["Slot"] = Slot;
-  exports["HandlerF"] = HandlerF;
-  exports["Prop"] = Prop;
-  exports["Attr"] = Attr;
-  exports["Key"] = Key;
-  exports["Handler"] = Handler;
-  exports["Ref"] = Ref;
-  exports["PropF"] = PropF;
-  exports["IsProp"] = IsProp;
-  exports["attrName"] = attrName;
-  exports["className"] = className;
-  exports["element"] = element;
-  exports["eventName"] = eventName;
-  exports["handler"] = handler;
-  exports["prop"] = prop;
-  exports["propName"] = propName;
-  exports["runAttrName"] = runAttrName;
-  exports["runClassName"] = runClassName;
-  exports["runEventName"] = runEventName;
-  exports["runNamespace"] = runNamespace;
-  exports["runPropName"] = runPropName;
-  exports["runTagName"] = runTagName;
-  exports["tagName"] = tagName;
-  exports["toPropString"] = toPropString;
-  exports["stringIsProp"] = stringIsProp;
-  exports["booleanIsProp"] = booleanIsProp;
-})(PS["Halogen.HTML.Core"] = PS["Halogen.HTML.Core"] || {});
+  exports["initDriverState"] = initDriverState;
+  exports["mkDriverStateXRef"] = mkDriverStateXRef;
+  exports["renderStateX"] = renderStateX;
+  exports["renderStateX_"] = renderStateX_;
+  exports["unDriverStateX"] = unDriverStateX;
+  exports["unRenderStateX"] = unRenderStateX;
+})(PS["Halogen.Aff.Driver.State"] = PS["Halogen.Aff.Driver.State"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+    "use strict";
+
+  exports.reallyUnsafeRefEq = function (a) {
+    return function (b) {
+      return a === b;
+    };
+  };
+})(PS["Unsafe.Reference"] = PS["Unsafe.Reference"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var $foreign = PS["Unsafe.Reference"];
+  var unsafeRefEq = $foreign.reallyUnsafeRefEq;
+  exports["unsafeRefEq"] = unsafeRefEq;
+})(PS["Unsafe.Reference"] = PS["Unsafe.Reference"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
-  var Data_Bifunctor = PS["Data.Bifunctor"];
-  var Data_Lazy = PS["Data.Lazy"];
-  var Halogen_HTML_Core = PS["Halogen.HTML.Core"];
-  var Unsafe_Coerce = PS["Unsafe.Coerce"];
-  var Control_Semigroupoid = PS["Control.Semigroupoid"];
-  var Data_Unit = PS["Data.Unit"];
-  var Data_Eq = PS["Data.Eq"];
-  var Data_Functor = PS["Data.Functor"];
-  var Control_Category = PS["Control.Category"];        
-  var runTree = function (k) {
-      return function (t) {
-          var $5 = Unsafe_Coerce.unsafeCoerce(t);
-          return k($5);
-      };
-  };
-  var mkTree$prime = Unsafe_Coerce.unsafeCoerce;
-  exports["mkTree'"] = mkTree$prime;
-  exports["runTree"] = runTree;
-})(PS["Halogen.Component.Tree"] = PS["Halogen.Component.Tree"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Control_Monad_Aff_Free = PS["Control.Monad.Aff.Free"];
-  var Control_Monad_Free = PS["Control.Monad.Free"];
-  var Halogen_Query_EventSource = PS["Halogen.Query.EventSource"];
-  var Halogen_Query_HalogenF = PS["Halogen.Query.HalogenF"];
-  var Halogen_Query_StateF = PS["Halogen.Query.StateF"];
-  var Data_Unit = PS["Data.Unit"];
-  var Control_Category = PS["Control.Category"];
-  var Control_Semigroupoid = PS["Control.Semigroupoid"];
-  var Data_Function = PS["Data.Function"];
-  var modify = function (f) {
-      return Control_Monad_Free.liftF(new Halogen_Query_HalogenF.StateHF(new Halogen_Query_StateF.Modify(f, Data_Unit.unit)));
-  };                                                               
-  var action = function (act) {
-      return act(Data_Unit.unit);
-  };
-  exports["action"] = action;
-  exports["modify"] = modify;
-})(PS["Halogen.Query"] = PS["Halogen.Query"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
+  var Control_Applicative_Free = PS["Control.Applicative.Free"];
+  var Control_Coroutine = PS["Control.Coroutine"];
+  var Control_Monad_Aff = PS["Control.Monad.Aff"];
+  var Control_Monad_Aff_Unsafe = PS["Control.Monad.Aff.Unsafe"];
+  var Control_Monad_Aff_AVar = PS["Control.Monad.Aff.AVar"];
   var Control_Monad_Eff = PS["Control.Monad.Eff"];
+  var Control_Monad_Eff_Class = PS["Control.Monad.Eff.Class"];
+  var Control_Monad_Eff_Exception = PS["Control.Monad.Eff.Exception"];
+  var Control_Monad_Eff_Ref = PS["Control.Monad.Eff.Ref"];
+  var Control_Monad_Error_Class = PS["Control.Monad.Error.Class"];
+  var Control_Monad_Fork = PS["Control.Monad.Fork"];
   var Control_Monad_Free = PS["Control.Monad.Free"];
-  var Control_Monad_Free_Trans = PS["Control.Monad.Free.Trans"];
-  var Control_Monad_ST = PS["Control.Monad.ST"];
-  var Data_Array = PS["Data.Array"];
-  var Data_Array_ST = PS["Data.Array.ST"];
-  var Data_Bifunctor = PS["Data.Bifunctor"];
-  var Data_Foldable = PS["Data.Foldable"];
-  var Data_Functor_Coproduct = PS["Data.Functor.Coproduct"];
-  var Data_Lazy = PS["Data.Lazy"];
+  var Control_Monad_Trans_Class = PS["Control.Monad.Trans.Class"];
+  var Control_Parallel = PS["Control.Parallel"];
+  var Data_Coyoneda = PS["Data.Coyoneda"];
+  var Data_Either = PS["Data.Either"];
   var Data_List = PS["Data.List"];
+  var Data_Map = PS["Data.Map"];
+  var Data_Maybe = PS["Data.Maybe"];
+  var Data_StrMap = PS["Data.StrMap"];
+  var Data_Tuple = PS["Data.Tuple"];
+  var Halogen_Aff_Driver_State = PS["Halogen.Aff.Driver.State"];
+  var Halogen_Aff_Effects = PS["Halogen.Aff.Effects"];
+  var Halogen_Data_OrdBox = PS["Halogen.Data.OrdBox"];
+  var Halogen_Query_EventSource = PS["Halogen.Query.EventSource"];
+  var Halogen_Query_ForkF = PS["Halogen.Query.ForkF"];
+  var Halogen_Query_HalogenM = PS["Halogen.Query.HalogenM"];
+  var Halogen_Query_InputF = PS["Halogen.Query.InputF"];
+  var Unsafe_Reference = PS["Unsafe.Reference"];
+  var Control_Bind = PS["Control.Bind"];
+  var Data_Function = PS["Data.Function"];
+  var Data_List_Types = PS["Data.List.Types"];
+  var Control_Applicative = PS["Control.Applicative"];
+  var Data_Unit = PS["Data.Unit"];
+  var Data_Functor = PS["Data.Functor"];
+  var Data_Boolean = PS["Data.Boolean"];
+  var Data_Semiring = PS["Data.Semiring"];
+  var Data_Ord = PS["Data.Ord"];
+  var Control_Monad_Free_Trans = PS["Control.Monad.Free.Trans"];
+  var Data_Eq = PS["Data.Eq"];
+  var Control_Parallel_Class = PS["Control.Parallel.Class"];
+  var Control_Semigroupoid = PS["Control.Semigroupoid"];
+  var Control_Monad_Fork_Class = PS["Control.Monad.Fork.Class"];        
+  var queuingHandler = function (handler) {
+      return function (ref) {
+          return function (message) {
+              return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.readRef(ref)))(function (v) {
+                  if (v instanceof Data_Maybe.Nothing) {
+                      return handler(message);
+                  };
+                  if (v instanceof Data_Maybe.Just) {
+                      return Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.writeRef(ref)(new Data_Maybe.Just(new Data_List_Types.Cons(handler(message), v.value0))));
+                  };
+                  throw new Error("Failed pattern match at Halogen.Aff.Driver.Eval line 198, column 3 - line 202, column 57: " + [ v.constructor.name ]);
+              });
+          };
+      };
+  };
+  var parSequenceAff_ = function (v) {
+      if (v instanceof Data_List_Types.Nil) {
+          return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(Data_Unit.unit);
+      };
+      if (v instanceof Data_List_Types.Cons && v.value1 instanceof Data_List_Types.Nil) {
+          return Data_Functor["void"](Control_Monad_Aff.functorAff)(v.value0);
+      };
+      if (v instanceof Data_List_Types.Cons) {
+          return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.makeVar)(function (v1) {
+              return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.newRef(v.value1)))(function (v2) {
+                  var run = function (a) {
+                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff.attempt(a))(function (v3) {
+                          if (v3 instanceof Data_Either.Left) {
+                              return Control_Monad_Aff_AVar.putVar(v1)(new Data_Maybe.Just(v3.value0));
+                          };
+                          if (v3 instanceof Data_Either.Right) {
+                              return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.readRef(v2)))(function (v4) {
+                                  if (v4 instanceof Data_List_Types.Nil) {
+                                      return Control_Monad_Aff_AVar.putVar(v1)(Data_Maybe.Nothing.value);
+                                  };
+                                  if (v4 instanceof Data_List_Types.Cons) {
+                                      return Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.writeRef(v2)(v4.value1));
+                                  };
+                                  throw new Error("Failed pattern match at Halogen.Aff.Driver.Eval line 55, column 15 - line 57, column 57: " + [ v4.constructor.name ]);
+                              });
+                          };
+                          throw new Error("Failed pattern match at Halogen.Aff.Driver.Eval line 51, column 23 - line 57, column 57: " + [ v3.constructor.name ]);
+                      });
+                  };
+                  return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff.forkAll(Data_List_Types.foldableList)(Data_Functor.map(Data_List_Types.functorList)(run)(v)))(function (v3) {
+                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.peekVar(v1))(function (v4) {
+                          if (v4 instanceof Data_Maybe.Nothing) {
+                              return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(Data_Unit.unit);
+                          };
+                          if (v4 instanceof Data_Maybe.Just) {
+                              return Control_Monad_Error_Class.throwError(Control_Monad_Aff.monadErrorAff)(v4.value0);
+                          };
+                          throw new Error("Failed pattern match at Halogen.Aff.Driver.Eval line 59, column 24 - line 61, column 33: " + [ v4.constructor.name ]);
+                      });
+                  });
+              });
+          });
+      };
+      throw new Error("Failed pattern match at Halogen.Aff.Driver.Eval line 43, column 19 - line 61, column 33: " + [ v.constructor.name ]);
+  };
+  var handleLifecycle = function (lchs) {
+      return function (f) {
+          return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.writeRef(lchs)({
+              initializers: Data_List_Types.Nil.value, 
+              finalizers: Data_List_Types.Nil.value
+          })))(function () {
+              return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(f))(function (v) {
+                  return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.readRef(lchs)))(function (v1) {
+                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff.forkAll(Data_List_Types.foldableList)(v1.finalizers))(function () {
+                          return Control_Bind.bind(Control_Monad_Aff.bindAff)(parSequenceAff_(v1.initializers))(function () {
+                              return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(v);
+                          });
+                      });
+                  });
+              });
+          });
+      };
+  };
+  var $$eval = function (render) {
+      return function (r) {
+          var go = function (ref) {
+              return function (v) {
+                  if (v instanceof Halogen_Query_HalogenM.State) {
+                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.readRef(ref)))(function (v1) {
+                          var $57 = v.value0(v1.state);
+                          if (Unsafe_Reference.unsafeRefEq(v1.state)($57.value1)) {
+                              return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)($57.value0);
+                          };
+                          if (Data_Boolean.otherwise) {
+                              return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.writeRef(ref)((function () {
+                                  var $58 = {};
+                                  for (var $59 in v1) {
+                                      if ({}.hasOwnProperty.call(v1, $59)) {
+                                          $58[$59] = v1[$59];
+                                      };
+                                  };
+                                  $58.state = $57.value1;
+                                  return $58;
+                              })())))(function () {
+                                  return Control_Bind.bind(Control_Monad_Aff.bindAff)(handleLifecycle(v1.lifecycleHandlers)(render(v1.lifecycleHandlers)(ref)))(function () {
+                                      return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)($57.value0);
+                                  });
+                              });
+                          };
+                          throw new Error("Failed pattern match at Halogen.Aff.Driver.Eval line 106, column 7 - line 112, column 21: " + [ $57.constructor.name ]);
+                      });
+                  };
+                  if (v instanceof Halogen_Query_HalogenM.Subscribe) {
+                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.readRef(ref)))(function (v1) {
+                          return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff.forkAff(Control_Bind.bind(Control_Monad_Aff.bindAff)(Halogen_Query_EventSource.unEventSource(v.value0))(function (v2) {
+                              return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(function __do() {
+                                  var v3 = Control_Monad_Eff_Ref["modifyRef'"](v1.fresh)(function (i) {
+                                      return {
+                                          state: i + 1 | 0, 
+                                          value: i
+                                      };
+                                  })();
+                                  Control_Monad_Eff_Ref.modifyRef(v1.subscriptions)(Data_Functor.map(Data_Maybe.functorMaybe)(Data_Map.insert(Data_Ord.ordInt)(v3)(v2.done)))();
+                                  return v3;
+                              }))(function (v3) {
+                                  var consumer = Control_Bind.bind(Control_Monad_Free_Trans.bindFreeT(Control_Coroutine.functorAwait)(Control_Monad_Aff.monadAff))(Control_Coroutine["await"](Control_Monad_Aff.monadAff))(function (v4) {
+                                      return Control_Bind.bind(Control_Monad_Free_Trans.bindFreeT(Control_Coroutine.functorAwait)(Control_Monad_Aff.monadAff))(Control_Monad_Trans_Class.lift(Control_Monad_Free_Trans.monadTransFreeT(Control_Coroutine.functorAwait))(Control_Monad_Aff.monadAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.readRef(v1.subscriptions))))(function (v5) {
+                                          return Control_Applicative.when(Control_Monad_Free_Trans.applicativeFreeT(Control_Coroutine.functorAwait)(Control_Monad_Aff.monadAff))(Data_Maybe.isJust(v5))(Control_Bind.bind(Control_Monad_Free_Trans.bindFreeT(Control_Coroutine.functorAwait)(Control_Monad_Aff.monadAff))(Control_Monad_Trans_Class.lift(Control_Monad_Free_Trans.monadTransFreeT(Control_Coroutine.functorAwait))(Control_Monad_Aff.monadAff)(evalF(ref)(v4)))(function (v6) {
+                                              return Control_Applicative.when(Control_Monad_Free_Trans.applicativeFreeT(Control_Coroutine.functorAwait)(Control_Monad_Aff.monadAff))(Data_Eq.eq(Halogen_Query_EventSource.eqSubscribeStatus)(v6)(Halogen_Query_EventSource.Listening.value))(consumer);
+                                          }));
+                                      });
+                                  });
+                                  return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Coroutine.runProcess(Control_Monad_Aff.monadRecAff)(Control_Coroutine.pullFrom(Control_Monad_Aff.monadRecAff)(consumer)(v2.producer)))(function () {
+                                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(v2.done)(function () {
+                                          return Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.modifyRef(v1.subscriptions)(Data_Functor.map(Data_Maybe.functorMaybe)(Data_Map["delete"](Data_Ord.ordInt)(v3))));
+                                      });
+                                  });
+                              });
+                          })))(function () {
+                              return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(v.value1);
+                          });
+                      });
+                  };
+                  if (v instanceof Halogen_Query_HalogenM.Lift) {
+                      return v.value0;
+                  };
+                  if (v instanceof Halogen_Query_HalogenM.Halt) {
+                      return Control_Monad_Error_Class.throwError(Control_Monad_Aff.monadErrorAff)(Control_Monad_Eff_Exception.error(v.value0));
+                  };
+                  if (v instanceof Halogen_Query_HalogenM.GetSlots) {
+                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.readRef(ref)))(function (v1) {
+                          return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(v.value0(Data_Functor.map(Data_List_Types.functorList)(Halogen_Data_OrdBox.unOrdBox)(Data_Map.keys(v1.children))));
+                      });
+                  };
+                  if (v instanceof Halogen_Query_HalogenM.CheckSlot) {
+                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.readRef(ref)))(function (v1) {
+                          return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(v.value1(Data_Map.member(Halogen_Data_OrdBox.ordOrdBox)(v1.component.mkOrdBox(v.value0))(v1.children)));
+                      });
+                  };
+                  if (v instanceof Halogen_Query_HalogenM.ChildQuery) {
+                      return evalChildQuery(ref)(v.value0)(v.value1);
+                  };
+                  if (v instanceof Halogen_Query_HalogenM.Raise) {
+                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.readRef(ref)))(function (v1) {
+                          return Control_Bind.bind(Control_Monad_Aff.bindAff)(queuingHandler(v1.handler)(v1.pendingOuts)(v.value0))(function () {
+                              return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(v.value1);
+                          });
+                      });
+                  };
+                  if (v instanceof Halogen_Query_HalogenM.Par) {
+                      return Control_Parallel_Class.sequential(Control_Monad_Aff.parallelParAff)(Control_Applicative_Free.retractFreeAp(Control_Monad_Aff.applicativeParAff)(Control_Applicative_Free.hoistFreeAp(function ($125) {
+                          return Control_Parallel_Class.parallel(Control_Monad_Aff.parallelParAff)(evalM(ref)($125));
+                      })(v.value0)));
+                  };
+                  if (v instanceof Halogen_Query_HalogenM.Fork) {
+                      return Halogen_Query_ForkF.unFork(function (v1) {
+                          return Data_Functor.map(Control_Monad_Aff.functorAff)(function ($126) {
+                              return v1.value1(Data_Functor.map(Data_Functor.functorFn)(Control_Monad_Aff_Unsafe.unsafeCoerceAff)($126));
+                          })(Control_Monad_Fork_Class.fork(Control_Monad_Fork_Class.monadForkAff)(evalM(ref)(v1.value0)));
+                      })(v.value0);
+                  };
+                  if (v instanceof Halogen_Query_HalogenM.GetRef) {
+                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.readRef(ref)))(function (v1) {
+                          return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(v.value1(Data_StrMap.lookup(v.value0)(v1.refs)));
+                      });
+                  };
+                  throw new Error("Failed pattern match at Halogen.Aff.Driver.Eval line 103, column 12 - line 155, column 34: " + [ v.constructor.name ]);
+              };
+          };
+          var evalM = function (ref) {
+              return function (v) {
+                  return Control_Monad_Free.foldFree(Control_Monad_Aff.monadRecAff)(go(ref))(v);
+              };
+          };
+          var evalF = function (ref) {
+              return function (q) {
+                  return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.readRef(ref)))(function (v) {
+                      var $109 = v["component"]["eval"](q);
+                      return Control_Monad_Free.foldFree(Control_Monad_Aff.monadRecAff)(go(ref))($109);
+                  });
+              };
+          };
+          var evalChildQuery = function (ref) {
+              return function (p) {
+                  return Data_Coyoneda.unCoyoneda(function (k) {
+                      return function (q) {
+                          return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.readRef(ref)))(function (v) {
+                              var $111 = Data_Map.lookup(Halogen_Data_OrdBox.ordOrdBox)(v.component.mkOrdBox(p))(v.children);
+                              if ($111 instanceof Data_Maybe.Just) {
+                                  return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.readRef($111.value0)))(function (v1) {
+                                      return Halogen_Aff_Driver_State.unDriverStateX(function (ds) {
+                                          var $113 = ds.prjQuery(q);
+                                          if ($113 instanceof Data_Maybe.Just) {
+                                              return Data_Functor.map(Control_Monad_Aff.functorAff)(k)(evalF(ds.selfRef)($113.value0));
+                                          };
+                                          if ($113 instanceof Data_Maybe.Nothing) {
+                                              return Control_Monad_Error_Class.throwError(Control_Monad_Aff.monadErrorAff)(Control_Monad_Eff_Exception.error("Query projection failed for child query"));
+                                          };
+                                          throw new Error("Failed pattern match at Halogen.Aff.Driver.Eval line 168, column 32 - line 170, column 82: " + [ $113.constructor.name ]);
+                                      })(v1);
+                                  });
+                              };
+                              if ($111 instanceof Data_Maybe.Nothing) {
+                                  return Control_Monad_Error_Class.throwError(Control_Monad_Aff.monadErrorAff)(Control_Monad_Eff_Exception.error("Slot lookup failed for child query"));
+                              };
+                              throw new Error("Failed pattern match at Halogen.Aff.Driver.Eval line 165, column 5 - line 171, column 73: " + [ $111.constructor.name ]);
+                          });
+                      };
+                  });
+              };
+          };
+          return function (v) {
+              if (v instanceof Halogen_Query_InputF.RefUpdate) {
+                  return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.modifyRef(r)(function (v1) {
+                      var $118 = {};
+                      for (var $119 in v1) {
+                          if ({}.hasOwnProperty.call(v1, $119)) {
+                              $118[$119] = v1[$119];
+                          };
+                      };
+                      $118.refs = Data_StrMap.alter(Data_Function["const"](v.value1))(v.value0)(v1.refs);
+                      return $118;
+                  })))(function () {
+                      return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(v.value2);
+                  });
+              };
+              if (v instanceof Halogen_Query_InputF.Query) {
+                  return evalF(r)(v.value0);
+              };
+              throw new Error("Failed pattern match at Halogen.Aff.Driver.Eval line 89, column 3 - line 94, column 25: " + [ v.constructor.name ]);
+          };
+      };
+  };
+  exports["eval"] = $$eval;
+  exports["handleLifecycle"] = handleLifecycle;
+  exports["parSequenceAff_"] = parSequenceAff_;
+  exports["queuingHandler"] = queuingHandler;
+})(PS["Halogen.Aff.Driver.Eval"] = PS["Halogen.Aff.Driver.Eval"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Control_Coroutine = PS["Control.Coroutine"];
+  var Control_Monad_Aff = PS["Control.Monad.Aff"];
+  var Control_Monad_Aff_AVar = PS["Control.Monad.Aff.AVar"];
+  var Control_Monad_Eff = PS["Control.Monad.Eff"];
+  var Control_Monad_Eff_Class = PS["Control.Monad.Eff.Class"];
+  var Control_Monad_Eff_Console = PS["Control.Monad.Eff.Console"];
+  var Control_Monad_Eff_Exception = PS["Control.Monad.Eff.Exception"];
+  var Control_Monad_Eff_Ref = PS["Control.Monad.Eff.Ref"];
+  var Control_Monad_Eff_Unsafe = PS["Control.Monad.Eff.Unsafe"];
+  var Control_Monad_Rec_Class = PS["Control.Monad.Rec.Class"];
+  var Data_List = PS["Data.List"];
+  var Data_Either = PS["Data.Either"];
   var Data_Map = PS["Data.Map"];
   var Data_Maybe = PS["Data.Maybe"];
   var Data_Traversable = PS["Data.Traversable"];
   var Data_Tuple = PS["Data.Tuple"];
-  var Halogen_Component_ChildPath = PS["Halogen.Component.ChildPath"];
-  var Halogen_Component_Hook = PS["Halogen.Component.Hook"];
-  var Halogen_Component_Tree = PS["Halogen.Component.Tree"];
-  var Halogen_HTML_Core = PS["Halogen.HTML.Core"];
-  var Halogen_Query = PS["Halogen.Query"];
-  var Halogen_Query_EventSource = PS["Halogen.Query.EventSource"];
-  var Halogen_Query_HalogenF = PS["Halogen.Query.HalogenF"];
-  var Halogen_Query_StateF = PS["Halogen.Query.StateF"];
-  var Partial_Unsafe = PS["Partial.Unsafe"];
-  var Unsafe_Coerce = PS["Unsafe.Coerce"];
-  var Data_Functor = PS["Data.Functor"];
-  var Control_Semigroupoid = PS["Control.Semigroupoid"];
-  var Data_Function = PS["Data.Function"];
-  var Control_Category = PS["Control.Category"];
-  var Control_Coroutine_Stalling = PS["Control.Coroutine.Stalling"];
-  var Data_Unit = PS["Data.Unit"];
-  var Data_Semigroup = PS["Data.Semigroup"];
-  var Data_Monoid = PS["Data.Monoid"];
-  var Control_Bind = PS["Control.Bind"];
-  var Control_Applicative = PS["Control.Applicative"];
-  var Data_List_Types = PS["Data.List.Types"];
-  var Control_Apply = PS["Control.Apply"];
-  var renderComponent = function (v) {
-      return v.render;
-  };
-  var queryComponent = function (v) {
-      return v["eval"];
-  };
-  var lifecycleComponent = function (spec) {
-      var renderTree = function (html) {
-          return Halogen_Component_Tree["mkTree'"]({
-              slot: Data_Unit.unit, 
-              html: Data_Lazy.defer(function (v) {
-                  return Unsafe_Coerce.unsafeCoerce(html);
-              }), 
-              eq: function (v) {
-                  return function (v1) {
-                      return false;
-                  };
-              }, 
-              thunk: false
-          });
-      };
-      return {
-          render: function (s) {
-              return {
-                  state: s, 
-                  hooks: [  ], 
-                  tree: renderTree(spec.render(s))
-              };
-          }, 
-          "eval": spec["eval"], 
-          initializer: spec.initializer, 
-          finalizers: function (s) {
-              return Data_Maybe.maybe([  ])(function (i) {
-                  return [ Halogen_Component_Hook.finalized(spec["eval"])(s)(i) ];
-              })(spec.finalizer);
-          }
-      };
-  };
-  var initializeComponent = function (v) {
-      return v.initializer;
-  };
-  var component = function (spec) {
-      return lifecycleComponent({
-          render: spec.render, 
-          "eval": spec["eval"], 
-          initializer: Data_Maybe.Nothing.value, 
-          finalizer: Data_Maybe.Nothing.value
-      });
-  };
-  exports["component"] = component;
-  exports["initializeComponent"] = initializeComponent;
-  exports["lifecycleComponent"] = lifecycleComponent;
-  exports["queryComponent"] = queryComponent;
-  exports["renderComponent"] = renderComponent;
-})(PS["Halogen.Component"] = PS["Halogen.Component"] || {});
-(function(exports) {
-  /* global exports, require */
-  "use strict";
-  var vcreateElement =require("virtual-dom/create-element");
-  var vdiff =require("virtual-dom/diff");
-  var vpatch =require("virtual-dom/patch");
-  var VText =require("virtual-dom/vnode/vtext");
-  var VirtualNode =require("virtual-dom/vnode/vnode");
-  var SoftSetHook =require("virtual-dom/virtual-hyperscript/hooks/soft-set-hook"); 
-
-  // jshint maxparams: 2
-  exports.prop = function (key, value) {
-    var props = {};
-    props[key] = value;
-    return props;
-  };
-
-  // jshint maxparams: 2
-  exports.attr = function (key, value) {
-    var props = { attributes: {} };
-    props.attributes[key] = value;
-    return props;
-  };
-
-  function HandlerHook (key, f) {
-    this.key = key;
-    this.callback = function (e) {
-      f(e)();
-    };
-  }
-
-  HandlerHook.prototype = {
-    hook: function (node) {
-      node.addEventListener(this.key, this.callback);
-    },
-    unhook: function (node) {
-      node.removeEventListener(this.key, this.callback);
-    }
-  };
-
-  // jshint maxparams: 2
-  exports.handlerProp = function (key, f) {
-    var props = {};
-    props["halogen-hook-" + key] = new HandlerHook(key, f);
-    return props;
-  };
-
-  exports.refPropImpl = function (nothing) {
-    return function (just) {
-
-      var ifHookFn = function (init) {
-        // jshint maxparams: 3
-        return function (node, prop, diff) {
-          // jshint validthis: true
-          if (typeof diff === "undefined") {
-            this.f(init ? just(node) : nothing)();
-          }
-        };
-      };
-
-      // jshint maxparams: 1
-      function RefHook (f) {
-        this.f = f;
-      }
-
-      RefHook.prototype = {
-        hook: ifHookFn(true),
-        unhook: ifHookFn(false)
-      };
-
-      return function (f) {
-        return { "halogen-ref": new RefHook(f) };
-      };
-    };
-  };
-
-  // jshint maxparams: 3
-  function HalogenWidget (tree, eq, render) {
-    this.tree = tree;
-    this.eq = eq;
-    this.render = render;
-    this.vdom = null;
-    this.el = null;
-  }
-
-  HalogenWidget.prototype = {
-    type: "Widget",
-    init: function () {
-      this.vdom = this.render(this.tree);
-      this.el = vcreateElement(this.vdom);
-      return this.el;
-    },
-    update: function (prev, node) {
-      if (!prev.tree || !this.eq(prev.tree.slot)(this.tree.slot)) {
-        return this.init();
-      }
-      if (this.tree.thunk) {
-        this.vdom = prev.vdom;
-        this.el = prev.el;
-      } else {
-        this.vdom = this.render(this.tree);
-        this.el = vpatch(node, vdiff(prev.vdom, this.vdom));
-      }
-    }
-  };
-
-  exports.widget = function (tree) {
-    return function (eq) {
-      return function (render) {
-        return new HalogenWidget(tree, eq, render);
-      };
-    };
-  };
-
-  exports.concatProps = function () {
-    // jshint maxparams: 2
-    var hOP = Object.prototype.hasOwnProperty;
-    var copy = function (props, result) {
-      for (var key in props) {
-        if (hOP.call(props, key)) {
-          if (key === "attributes") {
-            var attrs = props[key];
-            var resultAttrs = result[key] || (result[key] = {});
-            for (var attr in attrs) {
-              if (hOP.call(attrs, attr)) {
-                resultAttrs[attr] = attrs[attr];
-              }
-            }
-          } else {
-            result[key] = props[key];
-          }
-        }
-      }
-      return result;
-    };
-    return function (p1, p2) {
-      return copy(p2, copy(p1, {}));
-    };
-  }();
-
-  exports.emptyProps = {};
-
-  exports.createElement = function (vtree) {
-    return vcreateElement(vtree);
-  };
-
-  exports.diff = function (vtree1) {
-    return function (vtree2) {
-      return vdiff(vtree1, vtree2);
-    };
-  };
-
-  exports.patch = function (p) {
-    return function (node) {
-      return function () {
-        return vpatch(node, p);
-      };
-    };
-  };
-
-  exports.vtext = function (s) {
-    return new VText(s);
-  };
-
-  exports.vnode = function (namespace) {
-    return function (name) {
-      return function (key) {
-        return function (props) {
-          return function (children) {
-            if (name === "input" && props.value !== undefined) {
-              props.value = new SoftSetHook(props.value);
-            }
-            return new VirtualNode(name, props, children, key, namespace);
-          };
-        };
-      };
-    };
-  };
-})(PS["Halogen.Internal.VirtualDOM"] = PS["Halogen.Internal.VirtualDOM"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var $foreign = PS["Halogen.Internal.VirtualDOM"];
-  var Prelude = PS["Prelude"];
-  var Control_Monad_Eff = PS["Control.Monad.Eff"];
-  var Data_Monoid = PS["Data.Monoid"];
-  var Data_Maybe = PS["Data.Maybe"];
-  var Data_Nullable = PS["Data.Nullable"];
-  var Data_Function_Uncurried = PS["Data.Function.Uncurried"];
-  var DOM = PS["DOM"];
-  var DOM_HTML_Types = PS["DOM.HTML.Types"];
-  var Halogen_Component_Tree = PS["Halogen.Component.Tree"];
-  var Data_Semigroup = PS["Data.Semigroup"];        
-  var semigroupProps = new Data_Semigroup.Semigroup(Data_Function_Uncurried.runFn2($foreign.concatProps));
-  var refProp = $foreign.refPropImpl(Data_Maybe.Nothing.value)(Data_Maybe.Just.create);
-  var monoidProps = new Data_Monoid.Monoid(function () {
-      return semigroupProps;
-  }, $foreign.emptyProps);
-  exports["refProp"] = refProp;
-  exports["semigroupProps"] = semigroupProps;
-  exports["monoidProps"] = monoidProps;
-  exports["attr"] = $foreign.attr;
-  exports["createElement"] = $foreign.createElement;
-  exports["diff"] = $foreign.diff;
-  exports["handlerProp"] = $foreign.handlerProp;
-  exports["patch"] = $foreign.patch;
-  exports["prop"] = $foreign.prop;
-  exports["vnode"] = $foreign.vnode;
-  exports["vtext"] = $foreign.vtext;
-  exports["widget"] = $foreign.widget;
-})(PS["Halogen.Internal.VirtualDOM"] = PS["Halogen.Internal.VirtualDOM"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Control_Monad_Aff = PS["Control.Monad.Aff"];
-  var Control_Monad_Eff = PS["Control.Monad.Eff"];
-  var Control_Monad_Eff_Exception = PS["Control.Monad.Eff.Exception"];
-  var Data_Exists = PS["Data.Exists"];
-  var Data_ExistsR = PS["Data.ExistsR"];
-  var Data_Foldable = PS["Data.Foldable"];
-  var Data_Function_Uncurried = PS["Data.Function.Uncurried"];
-  var Data_Lazy = PS["Data.Lazy"];
-  var Data_Maybe = PS["Data.Maybe"];
-  var Data_Monoid = PS["Data.Monoid"];
-  var Data_Nullable = PS["Data.Nullable"];
-  var Halogen_Effects = PS["Halogen.Effects"];
-  var Halogen_Component_Tree = PS["Halogen.Component.Tree"];
-  var Halogen_HTML_Core = PS["Halogen.HTML.Core"];
-  var Halogen_HTML_Events_Handler = PS["Halogen.HTML.Events.Handler"];
-  var Halogen_Internal_VirtualDOM = PS["Halogen.Internal.VirtualDOM"];
-  var Control_Semigroupoid = PS["Control.Semigroupoid"];
-  var Data_Functor = PS["Data.Functor"];
-  var Data_Function = PS["Data.Function"];
-  var Control_Applicative = PS["Control.Applicative"];
-  var Data_Unit = PS["Data.Unit"];
-  var Data_Semigroup = PS["Data.Semigroup"];
-  var Control_Bind = PS["Control.Bind"];        
-  var handleAff = function ($40) {
-      return Data_Functor["void"](Control_Monad_Eff.functorEff)(Control_Monad_Aff.runAff(Control_Monad_Eff_Exception.throwException)(Data_Function["const"](Control_Applicative.pure(Control_Monad_Eff.applicativeEff)(Data_Unit.unit)))($40));
-  };
-  var renderProp = function (v) {
-      return function (v1) {
-          if (v1 instanceof Halogen_HTML_Core.Prop) {
-              return Data_Exists.runExists(function (v2) {
-                  return Halogen_Internal_VirtualDOM.prop(Halogen_HTML_Core.runPropName(v2.value0), v2.value1);
-              })(v1.value0);
-          };
-          if (v1 instanceof Halogen_HTML_Core.Attr) {
-              var attrName = Data_Maybe.maybe("")(function (ns$prime) {
-                  return Halogen_HTML_Core.runNamespace(ns$prime) + ":";
-              })(v1.value0) + Halogen_HTML_Core.runAttrName(v1.value1);
-              return Halogen_Internal_VirtualDOM.attr(attrName, v1.value2);
-          };
-          if (v1 instanceof Halogen_HTML_Core.Handler) {
-              return Data_ExistsR.runExistsR(function (v2) {
-                  return Halogen_Internal_VirtualDOM.handlerProp(Halogen_HTML_Core.runEventName(v2.value0), function (ev) {
-                      return handleAff(Control_Bind.bind(Control_Monad_Aff.bindAff)(Halogen_HTML_Events_Handler.runEventHandler(Control_Monad_Aff.monadAff)(Control_Monad_Aff.monadEffAff)(ev)(v2.value1(ev)))(Data_Maybe.maybe(Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(Data_Unit.unit))(v)));
-                  });
-              })(v1.value0);
-          };
-          if (v1 instanceof Halogen_HTML_Core.Ref) {
-              return Halogen_Internal_VirtualDOM.refProp(function ($41) {
-                  return handleAff(v(v1.value0($41)));
-              });
-          };
-          return Data_Monoid.mempty(Halogen_Internal_VirtualDOM.monoidProps);
-      };
-  };
-  var findKey = function (v) {
-      return function (v1) {
-          if (v1 instanceof Halogen_HTML_Core.Key) {
-              return new Data_Maybe.Just(v1.value0);
-          };
-          return v;
-      };
-  };
-  var renderTree = function (f) {
-      return Halogen_Component_Tree.runTree(function (tree) {
-          var go = function (v) {
-              if (v instanceof Halogen_HTML_Core.Text) {
-                  return Halogen_Internal_VirtualDOM.vtext(v.value0);
-              };
-              if (v instanceof Halogen_HTML_Core.Slot) {
-                  return Halogen_Internal_VirtualDOM.widget(v.value0)(tree.eq)(renderTree(f));
-              };
-              if (v instanceof Halogen_HTML_Core.Element) {
-                  var tag = Halogen_HTML_Core.runTagName(v.value1);
-                  var ns$prime = Data_Nullable.toNullable(Data_Functor.map(Data_Maybe.functorMaybe)(Halogen_HTML_Core.runNamespace)(v.value0));
-                  var key = Data_Nullable.toNullable(Data_Foldable.foldl(Data_Foldable.foldableArray)(findKey)(Data_Maybe.Nothing.value)(v.value2));
-                  return Halogen_Internal_VirtualDOM.vnode(ns$prime)(tag)(key)(Data_Foldable.foldMap(Data_Foldable.foldableArray)(Halogen_Internal_VirtualDOM.monoidProps)(renderProp(f))(v.value2))(Data_Functor.map(Data_Functor.functorArray)(go)(v.value3));
-              };
-              throw new Error("Failed pattern match at Halogen.HTML.Renderer.VirtualDOM line 49, column 5 - line 56, column 28: " + [ v.constructor.name ]);
-          };
-          return go(Data_Lazy.force(tree.html));
-      });
-  };
-  exports["renderTree"] = renderTree;
-})(PS["Halogen.HTML.Renderer.VirtualDOM"] = PS["Halogen.HTML.Renderer.VirtualDOM"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Control_Coroutine = PS["Control.Coroutine"];
-  var Control_Coroutine_Stalling = PS["Control.Coroutine.Stalling"];
-  var Control_Monad_Aff = PS["Control.Monad.Aff"];
-  var Control_Monad_Aff_AVar = PS["Control.Monad.Aff.AVar"];
-  var Control_Monad_Eff_Class = PS["Control.Monad.Eff.Class"];
-  var Control_Monad_Eff_Exception = PS["Control.Monad.Eff.Exception"];
-  var Control_Monad_Error_Class = PS["Control.Monad.Error.Class"];
-  var Control_Monad_Free = PS["Control.Monad.Free"];
-  var Control_Monad_Rec_Class = PS["Control.Monad.Rec.Class"];
-  var Control_Monad_State = PS["Control.Monad.State"];
-  var Control_Monad_Trans_Class = PS["Control.Monad.Trans.Class"];
-  var Data_Foldable = PS["Data.Foldable"];
-  var Data_List = PS["Data.List"];
-  var Data_Maybe = PS["Data.Maybe"];
-  var Data_Tuple = PS["Data.Tuple"];
-  var DOM_HTML_Types = PS["DOM.HTML.Types"];
-  var DOM_Node_Node = PS["DOM.Node.Node"];
+  var Halogen = PS["Halogen"];
+  var Halogen_Aff_Driver_Eval = PS["Halogen.Aff.Driver.Eval"];
+  var Halogen_Aff_Driver_State = PS["Halogen.Aff.Driver.State"];
+  var Halogen_Aff_Effects = PS["Halogen.Aff.Effects"];
   var Halogen_Component = PS["Halogen.Component"];
-  var Halogen_Component_Hook = PS["Halogen.Component.Hook"];
-  var Halogen_Effects = PS["Halogen.Effects"];
-  var Halogen_HTML_Renderer_VirtualDOM = PS["Halogen.HTML.Renderer.VirtualDOM"];
-  var Halogen_Internal_VirtualDOM = PS["Halogen.Internal.VirtualDOM"];
-  var Halogen_Query = PS["Halogen.Query"];
-  var Halogen_Query_HalogenF = PS["Halogen.Query.HalogenF"];
-  var Halogen_Query_EventSource = PS["Halogen.Query.EventSource"];
-  var Halogen_Query_StateF = PS["Halogen.Query.StateF"];
+  var Halogen_Data_OrdBox = PS["Halogen.Data.OrdBox"];
+  var Halogen_Query_InputF = PS["Halogen.Query.InputF"];
   var Data_List_Types = PS["Data.List.Types"];
-  var Control_Bind = PS["Control.Bind"];
-  var Data_Function = PS["Data.Function"];
-  var Control_Monad_State_Trans = PS["Control.Monad.State.Trans"];
-  var Data_Identity = PS["Data.Identity"];
-  var Control_Applicative = PS["Control.Applicative"];
-  var Data_HeytingAlgebra = PS["Data.HeytingAlgebra"];
-  var Data_Unit = PS["Data.Unit"];
-  var Control_Monad_Free_Trans = PS["Control.Monad.Free.Trans"];
   var Control_Semigroupoid = PS["Control.Semigroupoid"];
-  var Data_Functor = PS["Data.Functor"];        
-  var onInitializers = function (dictFoldable) {
-      return function (f) {
-          var go = function (v) {
-              return function (as) {
-                  if (v instanceof Halogen_Component_Hook.PostRender) {
-                      return new Data_List_Types.Cons(f(v.value0), as);
-                  };
-                  return as;
-              };
-          };
-          return Data_Foldable.foldr(dictFoldable)(go)(Data_List_Types.Nil.value);
-      };
+  var Data_Functor = PS["Data.Functor"];
+  var Data_Function = PS["Data.Function"];
+  var Control_Applicative = PS["Control.Applicative"];
+  var Data_Unit = PS["Data.Unit"];
+  var Control_Bind = PS["Control.Bind"];
+  var Data_Semiring = PS["Data.Semiring"];
+  var Data_Ord = PS["Data.Ord"];
+  var Data_Foldable = PS["Data.Foldable"];        
+  var newLifecycleHandlers = Control_Monad_Eff_Ref.newRef({
+      initializers: Data_List_Types.Nil.value, 
+      finalizers: Data_List_Types.Nil.value
+  });
+  var handleAff = function ($60) {
+      return Data_Functor["void"](Control_Monad_Eff.functorEff)(Control_Monad_Aff.runAff(Control_Monad_Eff_Exception.throwException)(Data_Function["const"](Control_Applicative.pure(Control_Monad_Eff.applicativeEff)(Data_Unit.unit)))($60));
   };
-  var onFinalizers = function (dictFoldable) {
-      return function (f) {
-          var go = function (v) {
-              return function (as) {
-                  if (v instanceof Halogen_Component_Hook.Finalized) {
-                      return new Data_List_Types.Cons(f(v.value0), as);
-                  };
-                  return as;
-              };
-          };
-          return Data_Foldable.foldr(dictFoldable)(go)(Data_List_Types.Nil.value);
-      };
-  };
-  var runUI = function (c) {
-      return function (s) {
-          return function (element) {
-              var driver$prime = function (e) {
-                  return function (s1) {
-                      return function (i) {
-                          return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar["makeVar'"](s1))(function (v) {
-                              return Data_Function.flip(Control_Monad_Free.runFreeM(Halogen_Query_HalogenF.functorHalogenF(Control_Monad_Aff.functorAff))(Control_Monad_Aff.monadRecAff))(e(i))(function (h) {
-                                  if (h instanceof Halogen_Query_HalogenF.StateHF) {
-                                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.takeVar(v))(function (v1) {
-                                          var $29 = Control_Monad_State.runState(Halogen_Query_StateF.stateN(Control_Monad_State_Trans.monadStateT(Data_Identity.monadIdentity))(Control_Monad_State_Trans.monadStateStateT(Data_Identity.monadIdentity))(h.value0))(v1);
-                                          return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.putVar(v)($29.value1))(function () {
-                                              return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)($29.value0);
-                                          });
+  var runUI = function (renderSpec) {
+      return function (component) {
+          return function (i) {
+              var subscribe = function (fresh) {
+                  return function (ref) {
+                      return function (consumer) {
+                          return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.makeVar)(function (v) {
+                              return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(function __do() {
+                                  var v1 = Control_Monad_Eff_Ref.readRef(fresh)();
+                                  Control_Monad_Eff_Ref.modifyRef(fresh)(function (v2) {
+                                      return v2 + 1 | 0;
+                                  })();
+                                  Control_Monad_Eff_Ref.modifyRef(ref)(Data_Map.insert(Data_Ord.ordInt)(v1)(v))();
+                                  return v1;
+                              }))(function (v1) {
+                                  var producer = Control_Coroutine.producer(Control_Monad_Aff.monadAff)(Data_Functor.map(Control_Monad_Aff.functorAff)(Data_Either.Left.create)(Control_Monad_Aff_AVar.takeVar(v)));
+                                  return Data_Functor["void"](Control_Monad_Aff.functorAff)(Control_Monad_Aff.forkAff(Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Coroutine.runProcess(Control_Monad_Aff.monadRecAff)(Control_Coroutine.connect(Control_Monad_Aff.monadRecAff)(Control_Monad_Aff.parallelParAff)(producer)(consumer)))(function () {
+                                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.modifyRef(ref)(Data_Map["delete"](Data_Ord.ordInt)(v1))))(function () {
+                                          return Control_Monad_Aff_AVar.killVar(v)(Control_Monad_Eff_Exception.error("ended"));
                                       });
-                                  };
-                                  if (h instanceof Halogen_Query_HalogenF.SubscribeHF) {
-                                      return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(h.value1);
-                                  };
-                                  if (h instanceof Halogen_Query_HalogenF.RenderHF) {
-                                      return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(h.value1);
-                                  };
-                                  if (h instanceof Halogen_Query_HalogenF.RenderPendingHF) {
-                                      return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(h.value0(Data_Maybe.Nothing.value));
-                                  };
-                                  if (h instanceof Halogen_Query_HalogenF.QueryHF) {
-                                      return h.value0;
-                                  };
-                                  if (h instanceof Halogen_Query_HalogenF.HaltHF) {
-                                      return Control_Monad_Error_Class.throwError(Control_Monad_Aff.monadErrorAff)(Control_Monad_Eff_Exception.error(h.value0));
-                                  };
-                                  throw new Error("Failed pattern match at Halogen.Driver line 144, column 7 - line 155, column 45: " + [ h.constructor.name ]);
+                                  })));
                               });
                           });
                       };
                   };
               };
-              var render = function (ref) {
-                  return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.takeVar(ref))(function (v) {
-                      if (v.renderPaused) {
-                          return Control_Monad_Aff_AVar.putVar(ref)((function () {
-                              var $42 = {};
-                              for (var $43 in v) {
-                                  if (v.hasOwnProperty($43)) {
-                                      $42[$43] = v[$43];
-                                  };
-                              };
-                              $42.renderPending = true;
-                              return $42;
-                          })());
-                      };
-                      if (!v.renderPaused) {
-                          var rc = Halogen_Component.renderComponent(c)(v.state);
-                          var vtree$prime = Halogen_HTML_Renderer_VirtualDOM.renderTree(driver(ref))(rc.tree);
-                          return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Halogen_Internal_VirtualDOM.patch(Halogen_Internal_VirtualDOM.diff(v.vtree)(vtree$prime))(v.node)))(function (v1) {
-                              return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.putVar(ref)({
-                                  node: v1, 
-                                  vtree: vtree$prime, 
-                                  state: rc.state, 
-                                  renderPending: false, 
-                                  renderPaused: true
-                              }))(function () {
-                                  return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff.forkAll(Data_List_Types.foldableList)(onFinalizers(Data_Foldable.foldableArray)(Halogen_Component_Hook.runFinalized(driver$prime))(rc.hooks)))(function () {
-                                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff.forkAll(Data_List_Types.foldableList)(onInitializers(Data_Foldable.foldableArray)(driver(ref))(rc.hooks)))(function () {
-                                          return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.modifyVar(function (v2) {
-                                              var $46 = {};
-                                              for (var $47 in v2) {
-                                                  if (v2.hasOwnProperty($47)) {
-                                                      $46[$47] = v2[$47];
-                                                  };
-                                              };
-                                              $46.renderPaused = false;
-                                              return $46;
-                                          })(ref))(function () {
-                                              return flushRender(ref);
-                                          });
-                                      });
-                                  });
-                              });
-                          });
-                      };
-                      throw new Error("Failed pattern match at Halogen.Driver line 160, column 5 - line 176, column 24: " + [ v.renderPaused.constructor.name ]);
-                  });
-              };
-              var flushRender = Control_Monad_Rec_Class.tailRecM(Control_Monad_Aff.monadRecAff)(function (ref) {
-                  return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.takeVar(ref))(function (v) {
-                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.putVar(ref)(v))(function () {
-                          var $50 = !v.renderPending;
-                          if ($50) {
-                              return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(new Control_Monad_Rec_Class.Done(Data_Unit.unit));
-                          };
-                          if (!$50) {
-                              return Control_Bind.bind(Control_Monad_Aff.bindAff)(render(ref))(function () {
-                                  return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(new Control_Monad_Rec_Class.Loop(ref));
-                              });
-                          };
-                          throw new Error("Failed pattern match at Halogen.Driver line 182, column 5 - line 186, column 24: " + [ $50.constructor.name ]);
+              var rootHandler = function (ref) {
+                  return function (message) {
+                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.readRef(ref)))(function (v) {
+                          return Data_Functor["void"](Control_Monad_Aff.functorAff)(Control_Monad_Aff.forkAll(Data_Map.foldableMap)(Data_Functor.map(Data_Map.functorMap)(function ($$var) {
+                              return Control_Monad_Aff_AVar.putVar($$var)(message);
+                          })(v)));
                       });
-                  });
+                  };
+              };
+              var handlePending = function (ref) {
+                  return function __do() {
+                      var v = Control_Monad_Eff_Ref.readRef(ref)();
+                      Control_Monad_Eff_Ref.writeRef(ref)(Data_Maybe.Nothing.value)();
+                      return Data_Foldable.for_(Control_Monad_Eff.applicativeEff)(Data_Foldable.foldableMaybe)(v)(function ($61) {
+                          return handleAff(Control_Monad_Aff.forkAll(Data_List_Types.foldableList)(Data_List.reverse($61)));
+                      })();
+                  };
+              };
+              var cleanupSubscriptions = Halogen_Aff_Driver_State.unDriverStateX(function (ds) {
+                  return function __do() {
+                      Control_Bind.bindFlipped(Control_Monad_Eff.bindEff)(Data_Foldable.traverse_(Control_Monad_Eff.applicativeEff)(Data_Foldable.foldableMaybe)(function ($62) {
+                          return handleAff(Control_Monad_Aff.forkAll(Data_Map.foldableMap)($62));
+                      }))(Control_Monad_Eff_Ref.readRef(ds.subscriptions))();
+                      return Control_Monad_Eff_Ref.writeRef(ds.subscriptions)(Data_Maybe.Nothing.value)();
+                  };
               });
-              var $$eval = function (ref) {
-                  return function (rpRef) {
-                      return function (h) {
-                          if (h instanceof Halogen_Query_HalogenF.StateHF) {
-                              return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.takeVar(ref))(function (v) {
-                                  if (h.value0 instanceof Halogen_Query_StateF.Get) {
-                                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.putVar(ref)(v))(function () {
-                                          return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(h.value0.value0(v.state));
-                                      });
-                                  };
-                                  if (h.value0 instanceof Halogen_Query_StateF.Modify) {
-                                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.takeVar(rpRef))(function (v1) {
-                                          return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.putVar(ref)((function () {
-                                              var $56 = {};
-                                              for (var $57 in v) {
-                                                  if (v.hasOwnProperty($57)) {
-                                                      $56[$57] = v[$57];
-                                                  };
-                                              };
-                                              $56.state = h.value0.value0(v.state);
-                                              return $56;
-                                          })()))(function () {
-                                              return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.putVar(rpRef)(new Data_Maybe.Just(Halogen_Query_HalogenF.Pending.value)))(function () {
-                                                  return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(h.value0.value1);
-                                              });
+              var squashChildInitializers = function (lchs) {
+                  return function (preInits) {
+                      return Halogen_Aff_Driver_State.unDriverStateX(function (st) {
+                          var parentInitializer = Data_Functor.map(Data_Maybe.functorMaybe)(function ($63) {
+                              return evalF(st.selfRef)(Halogen_Query_InputF.Query.create($63));
+                          })(st.component.initializer);
+                          return Control_Monad_Eff_Ref.modifyRef(lchs)(function (handlers) {
+                              return {
+                                  initializers: new Data_List_Types.Cons(Control_Bind.bind(Control_Monad_Aff.bindAff)(Halogen_Aff_Driver_Eval.parSequenceAff_(Data_List.reverse(handlers.initializers)))(function () {
+                                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Data_Foldable.sequence_(Control_Monad_Aff.applicativeAff)(Data_Foldable.foldableMaybe)(parentInitializer))(function () {
+                                          return Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(function __do() {
+                                              handlePending(st.pendingQueries)();
+                                              return handlePending(st.pendingOuts)();
                                           });
                                       });
-                                  };
-                                  throw new Error("Failed pattern match at Halogen.Driver line 106, column 9 - line 114, column 22: " + [ h.value0.constructor.name ]);
-                              });
-                          };
-                          if (h instanceof Halogen_Query_HalogenF.SubscribeHF) {
-                              var producer = Halogen_Query_EventSource.runEventSource(h.value0);
-                              var consumer = Control_Monad_Rec_Class.forever(Control_Monad_Free_Trans.monadRecFreeT(Control_Coroutine.functorAwait)(Control_Monad_Aff.monadAff))(Control_Bind.bindFlipped(Control_Monad_Free_Trans.bindFreeT(Control_Coroutine.functorAwait)(Control_Monad_Aff.monadAff))(function ($78) {
-                                  return Control_Monad_Trans_Class.lift(Control_Monad_Free_Trans.monadTransFreeT(Control_Coroutine.functorAwait))(Control_Monad_Aff.monadAff)(driver(ref)($78));
-                              })(Control_Coroutine["await"](Control_Monad_Aff.monadAff)));
-                              return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff.forkAff(Control_Coroutine_Stalling.runStallingProcess(Control_Monad_Aff.monadRecAff)(Control_Coroutine_Stalling.fuse(Control_Monad_Aff.monadRecAff)(Control_Monad_Aff.parallelParAff)(producer)(consumer))))(function () {
-                                  return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(h.value1);
-                              });
-                          };
-                          if (h instanceof Halogen_Query_HalogenF.RenderHF) {
-                              return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.modifyVar(Data_Function["const"](h.value0))(rpRef))(function () {
-                                  return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Applicative.when(Control_Monad_Aff.applicativeAff)(Data_Maybe.isNothing(h.value0))(render(ref)))(function () {
-                                      return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(h.value1);
-                                  });
-                              });
-                          };
-                          if (h instanceof Halogen_Query_HalogenF.RenderPendingHF) {
-                              return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.takeVar(rpRef))(function (v) {
-                                  return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.putVar(rpRef)(v))(function () {
-                                      return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(h.value0(v));
-                                  });
-                              });
-                          };
-                          if (h instanceof Halogen_Query_HalogenF.QueryHF) {
-                              return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.takeVar(rpRef))(function (v) {
-                                  return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Applicative.when(Control_Monad_Aff.applicativeAff)(Data_Maybe.isJust(v))(render(ref)))(function () {
-                                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.putVar(rpRef)(Data_Maybe.Nothing.value))(function () {
-                                          return h.value0;
-                                      });
-                                  });
-                              });
-                          };
-                          if (h instanceof Halogen_Query_HalogenF.HaltHF) {
-                              return Control_Monad_Error_Class.throwError(Control_Monad_Aff.monadErrorAff)(Control_Monad_Eff_Exception.error(h.value0));
-                          };
-                          throw new Error("Failed pattern match at Halogen.Driver line 103, column 5 - line 133, column 43: " + [ h.constructor.name ]);
-                      };
-                  };
-              };
-              var driver = function (ref) {
-                  return function (q) {
-                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar["makeVar'"](Data_Maybe.Nothing.value))(function (v) {
-                          return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Free.runFreeM(Halogen_Query_HalogenF.functorHalogenF(Control_Monad_Aff.functorAff))(Control_Monad_Aff.monadRecAff)($$eval(ref)(v))(Halogen_Component.queryComponent(c)(q)))(function (v1) {
-                              return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.takeVar(v))(function (v2) {
-                                  return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Applicative.when(Control_Monad_Aff.applicativeAff)(Data_Maybe.isJust(v2))(render(ref)))(function () {
-                                      return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(v1);
-                                  });
-                              });
+                                  }), preInits), 
+                                  finalizers: handlers.finalizers
+                              };
                           });
                       });
                   };
               };
-              return Data_Functor.map(Control_Monad_Aff.functorAff)(function (v) {
-                  return v.driver;
-              })(Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.makeVar)(function (v) {
-                  var rc = Halogen_Component.renderComponent(c)(s);
-                  var dr = driver(v);
-                  var vtree = Halogen_HTML_Renderer_VirtualDOM.renderTree(dr)(rc.tree);
-                  var node = Halogen_Internal_VirtualDOM.createElement(vtree);
-                  return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.putVar(v)({
-                      node: node, 
-                      vtree: vtree, 
-                      state: rc.state, 
-                      renderPending: false, 
-                      renderPaused: true
-                  }))(function () {
-                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(DOM_Node_Node.appendChild(DOM_HTML_Types.htmlElementToNode(node))(DOM_HTML_Types.htmlElementToNode(element))))(function () {
-                          return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff.forkAll(Data_List_Types.foldableList)(onInitializers(Data_Foldable.foldableArray)(dr)(rc.hooks)))(function () {
-                              return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff.forkAff(Data_Maybe.maybe(Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(Data_Unit.unit))(dr)(Halogen_Component.initializeComponent(c))))(function () {
-                                  return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Aff_AVar.modifyVar(function (v1) {
-                                      var $75 = {};
-                                      for (var $76 in v1) {
-                                          if (v1.hasOwnProperty($76)) {
-                                              $75[$76] = v1[$76];
+              var runComponent = function (lchs) {
+                  return function (handler) {
+                      return function (j) {
+                          return function (prjQuery) {
+                              return Halogen_Component.unComponent(function (c) {
+                                  return function __do() {
+                                      var v = newLifecycleHandlers();
+                                      var v1 = Halogen_Aff_Driver_State.initDriverState(c)(j)(handler)(prjQuery)(v)();
+                                      var v2 = Control_Monad_Eff_Ref.readRef(lchs)();
+                                      Control_Monad_Eff_Ref.writeRef(lchs)({
+                                          initializers: Data_List_Types.Nil.value, 
+                                          finalizers: v2.finalizers
+                                      })();
+                                      Control_Bind.bindFlipped(Control_Monad_Eff.bindEff)(Halogen_Aff_Driver_State.unDriverStateX(function ($64) {
+                                          return render(lchs)((function (v3) {
+                                              return v3.selfRef;
+                                          })($64));
+                                      }))(Control_Monad_Eff_Ref.readRef(v1))();
+                                      Control_Bind.bindFlipped(Control_Monad_Eff.bindEff)(squashChildInitializers(lchs)(v2.initializers))(Control_Monad_Eff_Ref.readRef(v1))();
+                                      return v1;
+                                  };
+                              });
+                          };
+                      };
+                  };
+              };
+              var renderChild = function (lchs) {
+                  return function (handler) {
+                      return function (mkOrdBox) {
+                          return function (childrenInRef) {
+                              return function (childrenOutRef) {
+                                  return Halogen_Component.unComponentSlot(function (p) {
+                                      return function (ctor) {
+                                          return function (input) {
+                                              return function (inputQuery) {
+                                                  return function (outputQuery) {
+                                                      return function (prjQuery) {
+                                                          var ordP = mkOrdBox(p);
+                                                          return function __do() {
+                                                              var v = Control_Monad_Eff_Ref.readRef(childrenInRef)();
+                                                              var v1 = (function () {
+                                                                  var $36 = Data_Map.pop(Halogen_Data_OrdBox.ordOrdBox)(ordP)(v);
+                                                                  if ($36 instanceof Data_Maybe.Just) {
+                                                                      return function __do() {
+                                                                          Control_Monad_Eff_Ref.writeRef(childrenInRef)($36.value0.value1)();
+                                                                          Data_Foldable.for_(Control_Monad_Eff.applicativeEff)(Data_Foldable.foldableMaybe)(inputQuery(input))(function (q) {
+                                                                              return function __do() {
+                                                                                  var v1 = Control_Monad_Eff_Ref.readRef($36.value0.value0)();
+                                                                                  return Halogen_Aff_Driver_State.unDriverStateX(function (st) {
+                                                                                      return Data_Foldable.for_(Control_Monad_Eff.applicativeEff)(Data_Foldable.foldableMaybe)(st.prjQuery(q))(function ($65) {
+                                                                                          return handleAff(evalF(st.selfRef)(Halogen_Query_InputF.Query.create($65)));
+                                                                                      });
+                                                                                  })(v1)();
+                                                                              };
+                                                                          })();
+                                                                          return $36.value0.value0;
+                                                                      };
+                                                                  };
+                                                                  if ($36 instanceof Data_Maybe.Nothing) {
+                                                                      return runComponent(lchs)(function ($66) {
+                                                                          return Data_Maybe.maybe(Control_Applicative.pure(Control_Monad_Aff.applicativeAff)(Data_Unit.unit))(handler)(outputQuery($66));
+                                                                      })(input)(prjQuery)(ctor);
+                                                                  };
+                                                                  throw new Error("Failed pattern match at Halogen.Aff.Driver line 203, column 14 - line 211, column 92: " + [ $36.constructor.name ]);
+                                                              })()();
+                                                              var v2 = Data_Functor.map(Control_Monad_Eff.functorEff)(Data_Map.member(Halogen_Data_OrdBox.ordOrdBox)(ordP))(Control_Monad_Eff_Ref.readRef(childrenOutRef))();
+                                                              Control_Applicative.when(Control_Monad_Eff.applicativeEff)(v2)(Control_Monad_Eff_Unsafe.unsafeCoerceEff(Control_Monad_Eff_Console.warn("Halogen: Duplicate slot address was detected during rendering, unexpected results may occur")))();
+                                                              Control_Monad_Eff_Ref.modifyRef(childrenOutRef)(Data_Map.insert(Halogen_Data_OrdBox.ordOrdBox)(ordP)(v1))();
+                                                              return Control_Bind.bind(Control_Monad_Eff.bindEff)(Control_Monad_Eff_Ref.readRef(v1))(Halogen_Aff_Driver_State.renderStateX(Control_Monad_Eff.functorEff)(function (v3) {
+                                                                  if (v3 instanceof Data_Maybe.Nothing) {
+                                                                      return Control_Monad_Eff_Exception["throw"]("Halogen internal error: child was not initialized in renderChild");
+                                                                  };
+                                                                  if (v3 instanceof Data_Maybe.Just) {
+                                                                      return Control_Applicative.pure(Control_Monad_Eff.applicativeEff)(renderSpec.renderChild(v3.value0));
+                                                                  };
+                                                                  throw new Error("Failed pattern match at Halogen.Aff.Driver line 217, column 36 - line 219, column 50: " + [ v3.constructor.name ]);
+                                                              }))();
+                                                          };
+                                                      };
+                                                  };
+                                              };
                                           };
                                       };
-                                      $75.renderPaused = false;
-                                      return $75;
-                                  })(v))(function () {
-                                      return Control_Bind.bind(Control_Monad_Aff.bindAff)(flushRender(v))(function () {
-                                          return Control_Applicative.pure(Control_Monad_Aff.applicativeAff)({
-                                              driver: dr
-                                          });
-                                      });
                                   });
+                              };
+                          };
+                      };
+                  };
+              };
+              var render = function (lchs) {
+                  return function ($$var) {
+                      return function __do() {
+                          var v = Control_Monad_Eff_Ref.readRef($$var)();
+                          var v1 = Data_Functor.map(Control_Monad_Eff.functorEff)(Data_Maybe.isNothing)(Control_Monad_Eff_Ref.readRef(v.pendingHandlers))();
+                          Control_Applicative.when(Control_Monad_Eff.applicativeEff)(v1)(Control_Monad_Eff_Ref.writeRef(v.pendingHandlers)(new Data_Maybe.Just(Data_List_Types.Nil.value)))();
+                          Control_Monad_Eff_Ref.writeRef(v.childrenOut)(Data_Map.empty)();
+                          Control_Monad_Eff_Ref.writeRef(v.childrenIn)(v.children)();
+                          var handler = Halogen_Aff_Driver_Eval.queuingHandler(function ($67) {
+                              return Data_Functor["void"](Control_Monad_Aff.functorAff)(evalF(v.selfRef)($67));
+                          })(v.pendingHandlers);
+                          var childHandler = Halogen_Aff_Driver_Eval.queuingHandler(function ($68) {
+                              return handler(Halogen_Query_InputF.Query.create($68));
+                          })(v.pendingQueries);
+                          var v2 = renderSpec.render(function ($69) {
+                              return handleAff(handler($69));
+                          })(renderChild(lchs)(childHandler)(v.component.mkOrdBox)(v.childrenIn)(v.childrenOut))(v.component.render(v.state))(v.rendering)();
+                          var v3 = Control_Monad_Eff_Ref.readRef(v.childrenOut)();
+                          Control_Bind.bind(Control_Monad_Eff.bindEff)(Control_Monad_Eff_Ref.readRef(v.childrenIn))(Data_Foldable.traverse_(Control_Monad_Eff.applicativeEff)(Data_Map.foldableMap)(function (childVar) {
+                              return function __do() {
+                                  var v4 = Control_Monad_Eff_Ref.readRef(childVar)();
+                                  Halogen_Aff_Driver_State.renderStateX_(Control_Monad_Eff.applicativeEff)(renderSpec.removeChild)(v4)();
+                                  cleanupSubscriptions(v4)();
+                                  return addFinalizer(lchs)(v4)();
+                              };
+                          }))();
+                          Control_Monad_Eff_Ref.modifyRef(v.selfRef)(function (v4) {
+                              return {
+                                  rendering: new Data_Maybe.Just(v2), 
+                                  children: v3, 
+                                  component: v4.component, 
+                                  state: v4.state, 
+                                  refs: v4.refs, 
+                                  childrenIn: v4.childrenIn, 
+                                  childrenOut: v4.childrenOut, 
+                                  selfRef: v4.selfRef, 
+                                  handler: v4.handler, 
+                                  pendingQueries: v4.pendingQueries, 
+                                  pendingOuts: v4.pendingOuts, 
+                                  pendingHandlers: v4.pendingHandlers, 
+                                  prjQuery: v4.prjQuery, 
+                                  fresh: v4.fresh, 
+                                  subscriptions: v4.subscriptions, 
+                                  lifecycleHandlers: v4.lifecycleHandlers
+                              };
+                          })();
+                          return Control_Applicative.when(Control_Monad_Eff.applicativeEff)(v1)(Data_Function.flip(Control_Monad_Rec_Class.tailRecM(Control_Monad_Rec_Class.monadRecEff))(Data_Unit.unit)(function (v4) {
+                              return function __do() {
+                                  var v5 = Control_Monad_Eff_Ref.readRef(v.pendingHandlers)();
+                                  Control_Monad_Eff_Ref.writeRef(v.pendingHandlers)(new Data_Maybe.Just(Data_List_Types.Nil.value))();
+                                  Data_Foldable.traverse_(Control_Monad_Eff.applicativeEff)(Data_Foldable.foldableMaybe)(function ($70) {
+                                      return handleAff(Control_Monad_Aff.forkAll(Data_List_Types.foldableList)(Data_List.reverse($70)));
+                                  })(v5)();
+                                  var v6 = Control_Monad_Eff_Ref.readRef(v.pendingHandlers)();
+                                  var $54 = Data_Maybe.maybe(false)(Data_List["null"])(v6);
+                                  if ($54) {
+                                      return Data_Functor.voidLeft(Control_Monad_Eff.functorEff)(Control_Monad_Eff_Ref.writeRef(v.pendingHandlers)(Data_Maybe.Nothing.value))(new Control_Monad_Rec_Class.Done(Data_Unit.unit))();
+                                  };
+                                  if (!$54) {
+                                      return new Control_Monad_Rec_Class.Loop(Data_Unit.unit);
+                                  };
+                                  throw new Error("Failed pattern match at Halogen.Aff.Driver line 186, column 9 - line 188, column 32: " + [ $54.constructor.name ]);
+                              };
+                          }))();
+                      };
+                  };
+              };
+              var evalF = function (ref) {
+                  return Halogen_Aff_Driver_Eval["eval"](render)(ref);
+              };
+              var addFinalizer = function (lchs) {
+                  return Halogen_Aff_Driver_State.unDriverStateX(function (st) {
+                      return function __do() {
+                          Data_Foldable.for_(Control_Monad_Eff.applicativeEff)(Data_Foldable.foldableMaybe)(Data_Functor.map(Data_Maybe.functorMaybe)(function ($71) {
+                              return evalF(st.selfRef)(Halogen_Query_InputF.Query.create($71));
+                          })(st.component.finalizer))(function (f) {
+                              return Control_Monad_Eff_Ref.modifyRef(lchs)(function (handlers) {
+                                  return {
+                                      initializers: handlers.initializers, 
+                                      finalizers: new Data_List_Types.Cons(f, handlers.finalizers)
+                                  };
                               });
-                          });
+                          })();
+                          return Data_Foldable.for_(Control_Monad_Eff.applicativeEff)(Data_Map.foldableMap)(st.children)(Control_Bind.composeKleisliFlipped(Control_Monad_Eff.bindEff)(addFinalizer(lchs))(Control_Monad_Eff_Ref.readRef))();
+                      };
+                  });
+              };
+              var evalDriver = function (ref) {
+                  return function (prjQuery) {
+                      return function (q) {
+                          var $55 = prjQuery(q);
+                          if ($55 instanceof Data_Maybe.Just) {
+                              return evalF(ref)(new Halogen_Query_InputF.Query($55.value0));
+                          };
+                          if ($55 instanceof Data_Maybe.Nothing) {
+                              return Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Exception.throwException(Control_Monad_Eff_Exception.error("Halogen internal error: query projection failed in runUI'")));
+                          };
+                          throw new Error("Failed pattern match at Halogen.Aff.Driver line 80, column 5 - line 82, column 110: " + [ $55.constructor.name ]);
+                      };
+                  };
+              };
+              return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(newLifecycleHandlers))(function (v) {
+                  return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Control_Monad_Eff_Ref.newRef(0)))(function (v1) {
+                      return Halogen_Aff_Driver_Eval.handleLifecycle(v)(function __do() {
+                          var v2 = Control_Monad_Eff_Ref.newRef(Data_Map.empty)();
+                          return Control_Bind.bind(Control_Monad_Eff.bindEff)(Control_Bind.bind(Control_Monad_Eff.bindEff)(runComponent(v)(rootHandler(v2))(i)(Data_Maybe.Just.create)(component))(Control_Monad_Eff_Ref.readRef))(Halogen_Aff_Driver_State.unDriverStateX(function (st) {
+                              return Control_Applicative.pure(Control_Monad_Eff.applicativeEff)({
+                                  query: evalDriver(st.selfRef)(st.prjQuery), 
+                                  subscribe: subscribe(v1)(v2)
+                              });
+                          }))();
                       });
                   });
-              }));
+              });
           };
       };
   };
   exports["runUI"] = runUI;
-})(PS["Halogen.Driver"] = PS["Halogen.Driver"] || {});
+})(PS["Halogen.Aff.Driver"] = PS["Halogen.Aff.Driver"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Halogen_HTML_Core = PS["Halogen.HTML.Core"];
-  var tr = function (xs) {
-      return Halogen_HTML_Core.element(Halogen_HTML_Core.tagName("tr"))(xs);
-  };
-  var tr_ = tr([  ]);    
-  var thead = function (xs) {
-      return Halogen_HTML_Core.element(Halogen_HTML_Core.tagName("thead"))(xs);
-  };
-  var thead_ = thead([  ]);
-  var th = function (xs) {
-      return Halogen_HTML_Core.element(Halogen_HTML_Core.tagName("th"))(xs);
-  };
-  var th_ = th([  ]);
-  var td = function (xs) {
-      return Halogen_HTML_Core.element(Halogen_HTML_Core.tagName("td"))(xs);
-  };
-  var td_ = td([  ]);
-  var tbody = function (xs) {
-      return Halogen_HTML_Core.element(Halogen_HTML_Core.tagName("tbody"))(xs);
-  };
-  var tbody_ = tbody([  ]);
-  var table = function (xs) {
-      return Halogen_HTML_Core.element(Halogen_HTML_Core.tagName("table"))(xs);
-  };
-  var table_ = table([  ]);  
-  var span = function (xs) {
-      return Halogen_HTML_Core.element(Halogen_HTML_Core.tagName("span"))(xs);
-  };                         
-  var label = function (xs) {
-      return Halogen_HTML_Core.element(Halogen_HTML_Core.tagName("label"))(xs);
-  };                   
-  var input = function (props) {
-      return Halogen_HTML_Core.element(Halogen_HTML_Core.tagName("input"))(props)([  ]);
-  };                 
-  var div = function (xs) {
-      return Halogen_HTML_Core.element(Halogen_HTML_Core.tagName("div"))(xs);
-  };
-  var div_ = div([  ]);
-  var button = function (xs) {
-      return Halogen_HTML_Core.element(Halogen_HTML_Core.tagName("button"))(xs);
-  };
-  exports["button"] = button;
-  exports["div"] = div;
-  exports["div_"] = div_;
-  exports["input"] = input;
-  exports["label"] = label;
-  exports["span"] = span;
-  exports["table"] = table;
-  exports["table_"] = table_;
-  exports["tbody"] = tbody;
-  exports["tbody_"] = tbody_;
-  exports["td"] = td;
-  exports["td_"] = td_;
-  exports["th"] = th;
-  exports["th_"] = th_;
-  exports["thead"] = thead;
-  exports["thead_"] = thead_;
-  exports["tr"] = tr;
-  exports["tr_"] = tr_;
-})(PS["Halogen.HTML.Elements"] = PS["Halogen.HTML.Elements"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Halogen_Component = PS["Halogen.Component"];
-  var Halogen_Component_ChildPath = PS["Halogen.Component.ChildPath"];
-  var Halogen_HTML_Core = PS["Halogen.HTML.Core"];
-  var Halogen_HTML_Elements = PS["Halogen.HTML.Elements"];
-  var Data_Functor = PS["Data.Functor"];        
-  var text = Halogen_HTML_Core.Text.create;
-  exports["text"] = text;
-})(PS["Halogen.HTML"] = PS["Halogen.HTML"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Data_Maybe = PS["Data.Maybe"];
-  var Data_String = PS["Data.String"];
-  var DOM_HTML_Types = PS["DOM.HTML.Types"];
-  var Halogen_HTML_Core = PS["Halogen.HTML.Core"];
-  var Data_Function = PS["Data.Function"];
-  var Data_Show = PS["Data.Show"];
-  var Data_Semigroup = PS["Data.Semigroup"];
-  var Control_Semigroupoid = PS["Control.Semigroupoid"];
-  var Data_HeytingAlgebra = PS["Data.HeytingAlgebra"];
-  var Data_Functor = PS["Data.Functor"];
-  var value = Halogen_HTML_Core.prop(Halogen_HTML_Core.stringIsProp)(Halogen_HTML_Core.propName("value"))(Data_Maybe.Just.create(Halogen_HTML_Core.attrName("value")));
-  var type_ = Halogen_HTML_Core.prop(Halogen_HTML_Core.stringIsProp)(Halogen_HTML_Core.propName("type"))(Data_Maybe.Just.create(Halogen_HTML_Core.attrName("type")));
-  var title = Halogen_HTML_Core.prop(Halogen_HTML_Core.stringIsProp)(Halogen_HTML_Core.propName("title"))(Data_Maybe.Just.create(Halogen_HTML_Core.attrName("title")));
-  var placeholder = Halogen_HTML_Core.prop(Halogen_HTML_Core.stringIsProp)(Halogen_HTML_Core.propName("placeholder"))(Data_Maybe.Just.create(Halogen_HTML_Core.attrName("placeholder")));
-  var name = Halogen_HTML_Core.prop(Halogen_HTML_Core.stringIsProp)(Halogen_HTML_Core.propName("name"))(Data_Maybe.Just.create(Halogen_HTML_Core.attrName("name")));
-  var id_ = Halogen_HTML_Core.prop(Halogen_HTML_Core.stringIsProp)(Halogen_HTML_Core.propName("id"))(Data_Maybe.Just.create(Halogen_HTML_Core.attrName("id")));
-  var $$for = Halogen_HTML_Core.prop(Halogen_HTML_Core.stringIsProp)(Halogen_HTML_Core.propName("htmlFor"))(Data_Maybe.Just.create(Halogen_HTML_Core.attrName("for")));
-  var class_ = function ($9) {
-      return Halogen_HTML_Core.prop(Halogen_HTML_Core.stringIsProp)(Halogen_HTML_Core.propName("className"))(Data_Maybe.Just.create(Halogen_HTML_Core.attrName("class")))(Halogen_HTML_Core.runClassName($9));
-  };
-  var checked = Halogen_HTML_Core.prop(Halogen_HTML_Core.booleanIsProp)(Halogen_HTML_Core.propName("checked"))(Data_Maybe.Just.create(Halogen_HTML_Core.attrName("checked")));
-  exports["checked"] = checked;
-  exports["class_"] = class_;
-  exports["for"] = $$for;
-  exports["id_"] = id_;
-  exports["name"] = name;
-  exports["placeholder"] = placeholder;
-  exports["title"] = title;
-  exports["type_"] = type_;
-  exports["value"] = value;
-})(PS["Halogen.HTML.Properties"] = PS["Halogen.HTML.Properties"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Data_Array = PS["Data.Array"];
-  var Data_Foldable = PS["Data.Foldable"];
-  var Data_Maybe = PS["Data.Maybe"];
-  var Data_Tuple = PS["Data.Tuple"];
-  var Unsafe_Coerce = PS["Unsafe.Coerce"];
-  var DOM_HTML_Types = PS["DOM.HTML.Types"];
-  var Halogen_HTML_Core = PS["Halogen.HTML.Core"];
-  var Halogen_HTML_Properties = PS["Halogen.HTML.Properties"];
-  var Data_Semigroup = PS["Data.Semigroup"];
-  var Data_Eq = PS["Data.Eq"];
-  var Data_Boolean = PS["Data.Boolean"];
-  var Data_Monoid = PS["Data.Monoid"];
-  var Data_Functor = PS["Data.Functor"];
-  var Control_Semigroupoid = PS["Control.Semigroupoid"];
-  var Data_HeytingAlgebra = PS["Data.HeytingAlgebra"];
-  var InputButton = (function () {
-      function InputButton() {
-
-      };
-      InputButton.value = new InputButton();
-      return InputButton;
-  })();
-  var InputCheckbox = (function () {
-      function InputCheckbox() {
-
-      };
-      InputCheckbox.value = new InputCheckbox();
-      return InputCheckbox;
-  })();
-  var InputColor = (function () {
-      function InputColor() {
-
-      };
-      InputColor.value = new InputColor();
-      return InputColor;
-  })();
-  var InputDate = (function () {
-      function InputDate() {
-
-      };
-      InputDate.value = new InputDate();
-      return InputDate;
-  })();
-  var InputDatetime = (function () {
-      function InputDatetime() {
-
-      };
-      InputDatetime.value = new InputDatetime();
-      return InputDatetime;
-  })();
-  var InputDatetimeLocal = (function () {
-      function InputDatetimeLocal() {
-
-      };
-      InputDatetimeLocal.value = new InputDatetimeLocal();
-      return InputDatetimeLocal;
-  })();
-  var InputEmail = (function () {
-      function InputEmail() {
-
-      };
-      InputEmail.value = new InputEmail();
-      return InputEmail;
-  })();
-  var InputFile = (function () {
-      function InputFile() {
-
-      };
-      InputFile.value = new InputFile();
-      return InputFile;
-  })();
-  var InputHidden = (function () {
-      function InputHidden() {
-
-      };
-      InputHidden.value = new InputHidden();
-      return InputHidden;
-  })();
-  var InputImage = (function () {
-      function InputImage() {
-
-      };
-      InputImage.value = new InputImage();
-      return InputImage;
-  })();
-  var InputMonth = (function () {
-      function InputMonth() {
-
-      };
-      InputMonth.value = new InputMonth();
-      return InputMonth;
-  })();
-  var InputNumber = (function () {
-      function InputNumber() {
-
-      };
-      InputNumber.value = new InputNumber();
-      return InputNumber;
-  })();
-  var InputPassword = (function () {
-      function InputPassword() {
-
-      };
-      InputPassword.value = new InputPassword();
-      return InputPassword;
-  })();
-  var InputRadio = (function () {
-      function InputRadio() {
-
-      };
-      InputRadio.value = new InputRadio();
-      return InputRadio;
-  })();
-  var InputRange = (function () {
-      function InputRange() {
-
-      };
-      InputRange.value = new InputRange();
-      return InputRange;
-  })();
-  var InputReset = (function () {
-      function InputReset() {
-
-      };
-      InputReset.value = new InputReset();
-      return InputReset;
-  })();
-  var InputSearch = (function () {
-      function InputSearch() {
-
-      };
-      InputSearch.value = new InputSearch();
-      return InputSearch;
-  })();
-  var InputSubmit = (function () {
-      function InputSubmit() {
-
-      };
-      InputSubmit.value = new InputSubmit();
-      return InputSubmit;
-  })();
-  var InputTel = (function () {
-      function InputTel() {
-
-      };
-      InputTel.value = new InputTel();
-      return InputTel;
-  })();
-  var InputText = (function () {
-      function InputText() {
-
-      };
-      InputText.value = new InputText();
-      return InputText;
-  })();
-  var InputTime = (function () {
-      function InputTime() {
-
-      };
-      InputTime.value = new InputTime();
-      return InputTime;
-  })();
-  var InputUrl = (function () {
-      function InputUrl() {
-
-      };
-      InputUrl.value = new InputUrl();
-      return InputUrl;
-  })();
-  var InputWeek = (function () {
-      function InputWeek() {
-
-      };
-      InputWeek.value = new InputWeek();
-      return InputWeek;
-  })();
-  var renderInputType = function (ty) {
-      if (ty instanceof InputButton) {
-          return "button";
-      };
-      if (ty instanceof InputCheckbox) {
-          return "checkbox";
-      };
-      if (ty instanceof InputColor) {
-          return "color";
-      };
-      if (ty instanceof InputDate) {
-          return "date";
-      };
-      if (ty instanceof InputDatetime) {
-          return "datetime";
-      };
-      if (ty instanceof InputDatetimeLocal) {
-          return "datetime-local";
-      };
-      if (ty instanceof InputEmail) {
-          return "email";
-      };
-      if (ty instanceof InputFile) {
-          return "file";
-      };
-      if (ty instanceof InputHidden) {
-          return "hidden";
-      };
-      if (ty instanceof InputImage) {
-          return "image";
-      };
-      if (ty instanceof InputMonth) {
-          return "month";
-      };
-      if (ty instanceof InputNumber) {
-          return "number";
-      };
-      if (ty instanceof InputPassword) {
-          return "password";
-      };
-      if (ty instanceof InputRadio) {
-          return "radio";
-      };
-      if (ty instanceof InputRange) {
-          return "range";
-      };
-      if (ty instanceof InputReset) {
-          return "reset";
-      };
-      if (ty instanceof InputSearch) {
-          return "search";
-      };
-      if (ty instanceof InputSubmit) {
-          return "submit";
-      };
-      if (ty instanceof InputTel) {
-          return "tel";
-      };
-      if (ty instanceof InputText) {
-          return "text";
-      };
-      if (ty instanceof InputTime) {
-          return "time";
-      };
-      if (ty instanceof InputUrl) {
-          return "url";
-      };
-      if (ty instanceof InputWeek) {
-          return "week";
-      };
-      throw new Error("Failed pattern match at Halogen.HTML.Properties.Indexed line 184, column 3 - line 209, column 1: " + [ ty.constructor.name ]);
-  };
-  var refine = Unsafe_Coerce.unsafeCoerce;            
-  var title = refine(Halogen_HTML_Properties.title);
-  var value = refine(Halogen_HTML_Properties.value);      
-  var placeholder = refine(Halogen_HTML_Properties.placeholder);
-  var name = refine(Halogen_HTML_Properties.name);
-  var inputType = function ($20) {
-      return refine(Halogen_HTML_Properties.type_)(renderInputType($20));
-  };
-  var id_ = refine(Halogen_HTML_Properties.id_);      
-  var $$for = refine(Halogen_HTML_Properties["for"]);   
-  var class_ = refine(Halogen_HTML_Properties.class_);
-  var checked = refine(Halogen_HTML_Properties.checked);
-  exports["InputButton"] = InputButton;
-  exports["InputCheckbox"] = InputCheckbox;
-  exports["InputColor"] = InputColor;
-  exports["InputDate"] = InputDate;
-  exports["InputDatetime"] = InputDatetime;
-  exports["InputDatetimeLocal"] = InputDatetimeLocal;
-  exports["InputEmail"] = InputEmail;
-  exports["InputFile"] = InputFile;
-  exports["InputHidden"] = InputHidden;
-  exports["InputImage"] = InputImage;
-  exports["InputMonth"] = InputMonth;
-  exports["InputNumber"] = InputNumber;
-  exports["InputPassword"] = InputPassword;
-  exports["InputRadio"] = InputRadio;
-  exports["InputRange"] = InputRange;
-  exports["InputReset"] = InputReset;
-  exports["InputSearch"] = InputSearch;
-  exports["InputSubmit"] = InputSubmit;
-  exports["InputTel"] = InputTel;
-  exports["InputText"] = InputText;
-  exports["InputTime"] = InputTime;
-  exports["InputUrl"] = InputUrl;
-  exports["InputWeek"] = InputWeek;
-  exports["checked"] = checked;
-  exports["class_"] = class_;
-  exports["for"] = $$for;
-  exports["id_"] = id_;
-  exports["inputType"] = inputType;
-  exports["name"] = name;
-  exports["placeholder"] = placeholder;
-  exports["title"] = title;
-  exports["value"] = value;
-})(PS["Halogen.HTML.Properties.Indexed"] = PS["Halogen.HTML.Properties.Indexed"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Halogen_HTML_Core = PS["Halogen.HTML.Core"];
-  var Halogen_HTML_Properties = PS["Halogen.HTML.Properties"];
-  var Halogen_HTML_Properties_Indexed = PS["Halogen.HTML.Properties.Indexed"];
-  var Halogen_HTML_Elements = PS["Halogen.HTML.Elements"];
-  var Unsafe_Coerce = PS["Unsafe.Coerce"];                                  
-  var td = Unsafe_Coerce.unsafeCoerce(Halogen_HTML_Elements.td);        
-  var span = Unsafe_Coerce.unsafeCoerce(Halogen_HTML_Elements.span);    
-  var label = Unsafe_Coerce.unsafeCoerce(Halogen_HTML_Elements.label);
-  var input = Unsafe_Coerce.unsafeCoerce(Halogen_HTML_Elements.input);  
-  var button = Unsafe_Coerce.unsafeCoerce(Halogen_HTML_Elements.button);
-  exports["button"] = button;
-  exports["input"] = input;
-  exports["label"] = label;
-  exports["span"] = span;
-  exports["td"] = td;
-})(PS["Halogen.HTML.Elements.Indexed"] = PS["Halogen.HTML.Elements.Indexed"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Data_Maybe = PS["Data.Maybe"];
-  var Halogen_Query = PS["Halogen.Query"];
-  var Halogen_HTML_Events_Handler = PS["Halogen.HTML.Events.Handler"];
-  var Halogen_HTML_Events_Types = PS["Halogen.HTML.Events.Types"];
-  var Halogen_HTML_Core = PS["Halogen.HTML.Core"];
-  var Data_Function = PS["Data.Function"];
-  var Control_Applicative = PS["Control.Applicative"];                                      
-  var onClick = Halogen_HTML_Core.handler(Halogen_HTML_Core.eventName("click"));
-  var input_ = function (f) {
-      return function (v) {
-          return Control_Applicative.pure(Halogen_HTML_Events_Handler.applicativeEventHandler)(Data_Maybe.Just.create(Halogen_Query.action(f)));
-      };
-  };
-  var input = function (f) {
-      return function (x) {
-          return Control_Applicative.pure(Halogen_HTML_Events_Handler.applicativeEventHandler)(Data_Maybe.Just.create(Halogen_Query.action(f(x))));
-      };
-  };
-  exports["input"] = input;
-  exports["input_"] = input_;
-  exports["onClick"] = onClick;
-})(PS["Halogen.HTML.Events"] = PS["Halogen.HTML.Events"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Prelude = PS["Prelude"];
-  var Control_Monad_Except = PS["Control.Monad.Except"];
-  var Data_Either = PS["Data.Either"];
-  var Data_Foreign = PS["Data.Foreign"];
-  var Data_Foreign_Class = PS["Data.Foreign.Class"];
-  var Data_Maybe = PS["Data.Maybe"];
-  var Halogen_HTML_Core = PS["Halogen.HTML.Core"];
-  var Halogen_HTML_Events_Handler = PS["Halogen.HTML.Events.Handler"];
-  var Control_Semigroupoid = PS["Control.Semigroupoid"];
-  var Data_Function = PS["Data.Function"];
-  var Control_Applicative = PS["Control.Applicative"];
-  var Data_Foreign_Index = PS["Data.Foreign.Index"];        
-  var addForeignPropHandler = function (dictIsForeign) {
-      return function (key) {
-          return function (prop) {
-              return function (f) {
-                  return Halogen_HTML_Core.handler(Halogen_HTML_Core.eventName(key))(function ($2) {
-                      return Data_Either.either(Data_Function["const"](Control_Applicative.pure(Halogen_HTML_Events_Handler.applicativeEventHandler)(Data_Maybe.Nothing.value)))(f)(Control_Monad_Except.runExcept(Data_Foreign_Class.readProp(dictIsForeign)(Data_Foreign_Index.indexString)(prop)(Data_Foreign.toForeign((function (v) {
-                          return v.target;
-                      })($2)))));
-                  });
-              };
-          };
-      };
-  };
-  var onChecked = addForeignPropHandler(Data_Foreign_Class.booleanIsForeign)("change")("checked"); 
-  var onValueInput = addForeignPropHandler(Data_Foreign_Class.stringIsForeign)("input")("value");
-  exports["onChecked"] = onChecked;
-  exports["onValueInput"] = onValueInput;
-})(PS["Halogen.HTML.Events.Forms"] = PS["Halogen.HTML.Events.Forms"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
-  "use strict";
-  var Data_Maybe = PS["Data.Maybe"];
-  var Unsafe_Coerce = PS["Unsafe.Coerce"];
-  var Halogen_HTML_Core = PS["Halogen.HTML.Core"];
-  var Halogen_HTML_Events = PS["Halogen.HTML.Events"];
-  var Halogen_HTML_Events_Forms = PS["Halogen.HTML.Events.Forms"];
-  var Halogen_HTML_Events_Handler = PS["Halogen.HTML.Events.Handler"];
-  var Halogen_HTML_Events_Types = PS["Halogen.HTML.Events.Types"];
-  var Halogen_HTML_Properties_Indexed = PS["Halogen.HTML.Properties.Indexed"];        
-  var refine$prime = Unsafe_Coerce.unsafeCoerce;
-  var refine = Unsafe_Coerce.unsafeCoerce;
-  var onValueInput = refine$prime(Halogen_HTML_Events_Forms.onValueInput);
-  var onClick = refine(Halogen_HTML_Events.onClick);
-  var onChecked = refine$prime(Halogen_HTML_Events_Forms.onChecked);
-  exports["onChecked"] = onChecked;
-  exports["onClick"] = onClick;
-  exports["onValueInput"] = onValueInput;
-})(PS["Halogen.HTML.Events.Indexed"] = PS["Halogen.HTML.Events.Indexed"] || {});
-(function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Monad_Aff = PS["Control.Monad.Aff"];
@@ -8598,7 +8405,7 @@ var PS = {};
   var DOM_HTML_Types = PS["DOM.HTML.Types"];
   var DOM_HTML_Window = PS["DOM.HTML.Window"];
   var DOM_Node_ParentNode = PS["DOM.Node.ParentNode"];
-  var Halogen_Effects = PS["Halogen.Effects"];
+  var Halogen_Aff_Effects = PS["Halogen.Aff.Effects"];
   var Control_Bind = PS["Control.Bind"];
   var Data_Function = PS["Data.Function"];
   var Data_Functor = PS["Data.Functor"];
@@ -8616,7 +8423,7 @@ var PS = {};
               if (v instanceof Data_Maybe.Just) {
                   return Data_Either.either(Data_Function["const"](Data_Maybe.Nothing.value))(Data_Maybe.Just.create)(Control_Monad_Except.runExcept(DOM_HTML_Types.readHTMLElement(Data_Foreign.toForeign(v.value0))));
               };
-              throw new Error("Failed pattern match at Halogen.Util line 54, column 8 - line 56, column 88: " + [ v.constructor.name ]);
+              throw new Error("Failed pattern match at Halogen.Aff.Util line 54, column 8 - line 56, column 88: " + [ v.constructor.name ]);
           })());
       });
   };
@@ -8640,9 +8447,623 @@ var PS = {};
   exports["awaitLoad"] = awaitLoad;
   exports["runHalogenAff"] = runHalogenAff;
   exports["selectElement"] = selectElement;
-})(PS["Halogen.Util"] = PS["Halogen.Util"] || {});
+})(PS["Halogen.Aff.Util"] = PS["Halogen.Aff.Util"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Data_Foreign = PS["Data.Foreign"];
+  var Data_Maybe = PS["Data.Maybe"];
+  var Data_MediaType = PS["Data.MediaType"];
+  var Data_Newtype = PS["Data.Newtype"];
+  var Data_String = PS["Data.String"];
+  var DOM_HTML_Indexed = PS["DOM.HTML.Indexed"];
+  var DOM_HTML_Indexed_ButtonType = PS["DOM.HTML.Indexed.ButtonType"];
+  var DOM_HTML_Indexed_FormMethod = PS["DOM.HTML.Indexed.FormMethod"];
+  var DOM_HTML_Indexed_InputType = PS["DOM.HTML.Indexed.InputType"];
+  var DOM_HTML_Indexed_MenuitemType = PS["DOM.HTML.Indexed.MenuitemType"];
+  var DOM_HTML_Indexed_MenuType = PS["DOM.HTML.Indexed.MenuType"];
+  var DOM_HTML_Indexed_OnOff = PS["DOM.HTML.Indexed.OnOff"];
+  var DOM_HTML_Indexed_OrderedListType = PS["DOM.HTML.Indexed.OrderedListType"];
+  var DOM_HTML_Indexed_PreloadValue = PS["DOM.HTML.Indexed.PreloadValue"];
+  var DOM_HTML_Indexed_StepValue = PS["DOM.HTML.Indexed.StepValue"];
+  var DOM_Node_Types = PS["DOM.Node.Types"];
+  var Halogen_HTML_Core = PS["Halogen.HTML.Core"];
+  var Halogen_Query_InputF = PS["Halogen.Query.InputF"];
+  var Unsafe_Coerce = PS["Unsafe.Coerce"];
+  var Data_Function = PS["Data.Function"];
+  var Data_Functor = PS["Data.Functor"];
+  var Data_Unit = PS["Data.Unit"];
+  var Control_Semigroupoid = PS["Control.Semigroupoid"];
+  var Data_HeytingAlgebra = PS["Data.HeytingAlgebra"];
+  var prop = function (dictIsProp) {
+      return Unsafe_Coerce.unsafeCoerce(Halogen_HTML_Core.prop(dictIsProp));
+  };                                                          
+  var title = prop(Halogen_HTML_Core.stringIsProp)("title");
+  var type_ = function (dictIsProp) {
+      return prop(dictIsProp)("type");
+  };
+  var value = prop(Halogen_HTML_Core.stringIsProp)("value");  
+  var placeholder = prop(Halogen_HTML_Core.stringIsProp)("placeholder");
+  var id_ = prop(Halogen_HTML_Core.stringIsProp)("id");    
+  var $$for = prop(Halogen_HTML_Core.stringIsProp)("htmlFor");
+  var class_ = function ($9) {
+      return prop(Halogen_HTML_Core.stringIsProp)("className")(Data_Newtype.unwrap(Halogen_HTML_Core.newtypeClassName)($9));
+  };
+  var checked = prop(Halogen_HTML_Core.booleanIsProp)("checked");
+  exports["checked"] = checked;
+  exports["class_"] = class_;
+  exports["for"] = $$for;
+  exports["id_"] = id_;
+  exports["placeholder"] = placeholder;
+  exports["prop"] = prop;
+  exports["title"] = title;
+  exports["type_"] = type_;
+  exports["value"] = value;
+})(PS["Halogen.HTML.Properties"] = PS["Halogen.HTML.Properties"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Data_Tuple = PS["Data.Tuple"];
+  var DOM_HTML_Indexed = PS["DOM.HTML.Indexed"];
+  var Halogen_HTML_Core = PS["Halogen.HTML.Core"];
+  var Halogen_HTML_Properties = PS["Halogen.HTML.Properties"];
+  var Halogen_Query_InputF = PS["Halogen.Query.InputF"];
+  var Halogen_VDom = PS["Halogen.VDom"];
+  var Unsafe_Coerce = PS["Unsafe.Coerce"];
+  var Halogen_VDom_Types = PS["Halogen.VDom.Types"];              
+  var element = Unsafe_Coerce.unsafeCoerce(Halogen_HTML_Core.element);
+  var input = function (props) {
+      return element("input")(props)([  ]);
+  };                   
+  var label = element("label");
+  var span = element("span");
+  var table = element("table");
+  var table_ = table([  ]);
+  var tbody = element("tbody");
+  var tbody_ = tbody([  ]);
+  var td = element("td");
+  var td_ = td([  ]);      
+  var th = element("th");
+  var th_ = th([  ]);
+  var thead = element("thead");
+  var thead_ = thead([  ]);
+  var tr = element("tr");
+  var tr_ = tr([  ]);
+  var div = element("div");
+  var div_ = div([  ]);
+  var button = element("button");
+  exports["button"] = button;
+  exports["div"] = div;
+  exports["div_"] = div_;
+  exports["element"] = element;
+  exports["input"] = input;
+  exports["label"] = label;
+  exports["span"] = span;
+  exports["table"] = table;
+  exports["table_"] = table_;
+  exports["tbody"] = tbody;
+  exports["tbody_"] = tbody_;
+  exports["td"] = td;
+  exports["td_"] = td_;
+  exports["th"] = th;
+  exports["th_"] = th_;
+  exports["thead"] = thead;
+  exports["thead_"] = thead_;
+  exports["tr"] = tr;
+  exports["tr_"] = tr_;
+})(PS["Halogen.HTML.Elements"] = PS["Halogen.HTML.Elements"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Control_Monad_Except = PS["Control.Monad.Except"];
+  var Data_List = PS["Data.List"];
+  var Data_Map = PS["Data.Map"];
+  var Data_Maybe = PS["Data.Maybe"];
+  var Data_Tuple = PS["Data.Tuple"];
+  var Data_Either = PS["Data.Either"];
+  var Data_Foreign = PS["Data.Foreign"];
+  var DOM_HTML_Types = PS["DOM.HTML.Types"];
+  var Halogen_Component_ChildPath = PS["Halogen.Component.ChildPath"];
+  var Halogen_Query_EventSource = PS["Halogen.Query.EventSource"];
+  var Halogen_Query_HalogenM = PS["Halogen.Query.HalogenM"];
+  var Control_Parallel = PS["Control.Parallel"];
+  var Control_Monad_Aff_Class = PS["Control.Monad.Aff.Class"];
+  var Control_Monad_Eff_Class = PS["Control.Monad.Eff.Class"];
+  var Control_Monad_State_Class = PS["Control.Monad.State.Class"];
+  var Control_Monad_Trans_Class = PS["Control.Monad.Trans.Class"];
+  var Halogen_Query_InputF = PS["Halogen.Query.InputF"];
+  var Control_Category = PS["Control.Category"];
+  var Control_Bind = PS["Control.Bind"];
+  var Data_Functor = PS["Data.Functor"];
+  var Data_List_Types = PS["Data.List.Types"];
+  var Control_Applicative = PS["Control.Applicative"];
+  var Control_Semigroupoid = PS["Control.Semigroupoid"];
+  var Data_Function = PS["Data.Function"];
+  var Data_Unit = PS["Data.Unit"];
+  var action = function (act) {
+      return act(Data_Unit.unit);
+  };
+  exports["action"] = action;
+})(PS["Halogen.Query"] = PS["Halogen.Query"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Control_Monad_Except = PS["Control.Monad.Except"];
+  var Data_Either = PS["Data.Either"];
+  var Data_Foreign = PS["Data.Foreign"];
+  var Data_Foreign_Class = PS["Data.Foreign.Class"];
+  var Data_Maybe = PS["Data.Maybe"];
+  var DOM_Event_Types = PS["DOM.Event.Types"];
+  var DOM_Event_Event = PS["DOM.Event.Event"];
+  var DOM_HTML_Event_Types = PS["DOM.HTML.Event.Types"];
+  var Halogen_Query = PS["Halogen.Query"];
+  var Halogen_Query_InputF = PS["Halogen.Query.InputF"];
+  var Halogen_HTML_Core = PS["Halogen.HTML.Core"];
+  var Halogen_HTML_Properties = PS["Halogen.HTML.Properties"];
+  var Unsafe_Coerce = PS["Unsafe.Coerce"];
+  var Data_Function = PS["Data.Function"];
+  var Control_Semigroupoid = PS["Control.Semigroupoid"];
+  var Data_Functor = PS["Data.Functor"];
+  var Data_Foreign_Index = PS["Data.Foreign.Index"];        
+  var mouseHandler = Unsafe_Coerce.unsafeCoerce;
+  var input_ = function (f) {
+      return function (v) {
+          return Data_Maybe.Just.create(Halogen_Query.action(f));
+      };
+  };
+  var input = function (f) {
+      return function (x) {
+          return Data_Maybe.Just.create(Halogen_Query.action(f(x)));
+      };
+  };
+  var handler = function (et) {
+      return function ($2) {
+          return Unsafe_Coerce.unsafeCoerce(Halogen_HTML_Core.handler)(et)(Data_Functor.map(Data_Functor.functorFn)(Data_Functor.map(Data_Maybe.functorMaybe)(Halogen_Query_InputF.Query.create))($2));
+      };
+  };                               
+  var onClick = function ($3) {
+      return handler("click")(mouseHandler($3));
+  };
+  var addForeignPropHandler = function (dictIsForeign) {
+      return function (key) {
+          return function (prop) {
+              return function (f) {
+                  return handler(key)(function ($28) {
+                      return Data_Either.either(Data_Function["const"](Data_Maybe.Nothing.value))(f)(Control_Monad_Except.runExcept(Data_Foreign_Class.readProp(dictIsForeign)(Data_Foreign_Index.indexString)(prop)(Data_Foreign.toForeign(DOM_Event_Event.currentTarget($28)))));
+                  });
+              };
+          };
+      };
+  };
+  var onChecked = addForeignPropHandler(Data_Foreign_Class.booleanIsForeign)("change")("checked"); 
+  var onValueInput = addForeignPropHandler(Data_Foreign_Class.stringIsForeign)("input")("value");
+  exports["handler"] = handler;
+  exports["input"] = input;
+  exports["input_"] = input_;
+  exports["onChecked"] = onChecked;
+  exports["onClick"] = onClick;
+  exports["onValueInput"] = onValueInput;
+})(PS["Halogen.HTML.Events"] = PS["Halogen.HTML.Events"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Control_Monad_Eff = PS["Control.Monad.Eff"];
+  var Data_Array = PS["Data.Array"];
+  var Data_Function_Uncurried = PS["Data.Function.Uncurried"];
+  var Data_Maybe = PS["Data.Maybe"];
+  var Data_Nullable = PS["Data.Nullable"];
+  var Data_Tuple = PS["Data.Tuple"];
+  var DOM = PS["DOM"];
+  var DOM_Node_Types = PS["DOM.Node.Types"];
+  var Halogen_VDom_Machine = PS["Halogen.VDom.Machine"];
+  var Halogen_VDom_Types = PS["Halogen.VDom.Types"];
+  var Halogen_VDom_Util = PS["Halogen.VDom.Util"];
+  var Data_Eq = PS["Data.Eq"];
+  var Control_Bind = PS["Control.Bind"];
+  var Control_Applicative = PS["Control.Applicative"];
+  var eqElemSpec = function (a, b) {
+      if (Data_Eq.eq(Halogen_VDom_Types.eqElemName)(a.value1)(b.value1)) {
+          if (a.value0 instanceof Data_Maybe.Just && (b.value0 instanceof Data_Maybe.Just && a.value0.value0 === b.value0.value0)) {
+              return true;
+          };
+          if (a.value0 instanceof Data_Maybe.Nothing && b.value0 instanceof Data_Maybe.Nothing) {
+              return true;
+          };
+          return false;
+      };
+      return false;
+  };
+  var buildWidget = function (v) {
+      var patch = function (v1) {
+          return function (v2) {
+              if (v2 instanceof Halogen_VDom_Types.Grafted) {
+                  return patch(v1)(Halogen_VDom_Types.runGraft(v2.value0));
+              };
+              if (v2 instanceof Halogen_VDom_Types.Widget) {
+                  return function __do() {
+                      var v3 = v1.value1(v2.value0)();
+                      return new Halogen_VDom_Machine.Step(v3.value0, patch(v3), v3.value2);
+                  };
+              };
+              return function __do() {
+                  v1.value2();
+                  return buildVDom(v)(v2)();
+              };
+          };
+      };
+      var render = function (w) {
+          return function __do() {
+              var v1 = v.buildWidget(v)(w)();
+              return new Halogen_VDom_Machine.Step(v1.value0, patch(v1), v1.value2);
+          };
+      };
+      return render;
+  };
+  var buildVDom = function (spec) {
+      var render = function (v) {
+          if (v instanceof Halogen_VDom_Types.Text) {
+              return buildText(spec)(v.value0);
+          };
+          if (v instanceof Halogen_VDom_Types.Elem) {
+              return buildElem(spec)(v.value0)(v.value1);
+          };
+          if (v instanceof Halogen_VDom_Types.Keyed) {
+              return buildKeyed(spec)(v.value0)(v.value1);
+          };
+          if (v instanceof Halogen_VDom_Types.Widget) {
+              return buildWidget(spec)(v.value0);
+          };
+          if (v instanceof Halogen_VDom_Types.Grafted) {
+              return buildVDom(spec)(Halogen_VDom_Types.runGraft(v.value0));
+          };
+          throw new Error("Failed pattern match at Halogen.VDom.DOM line 58, column 12 - line 63, column 44: " + [ v.constructor.name ]);
+      };
+      return render;
+  };
+  var buildText = function (v) {
+      var done = function (node) {
+          return function __do() {
+              var v1 = Halogen_VDom_Util.unsafeParent(node);
+              return Halogen_VDom_Util.removeChild(node, v1)();
+          };
+      };
+      var patch = function (node, s1) {
+          return function (v1) {
+              if (v1 instanceof Halogen_VDom_Types.Grafted) {
+                  return patch(node, s1)(Halogen_VDom_Types.runGraft(v1.value0));
+              };
+              if (v1 instanceof Halogen_VDom_Types.Text) {
+                  var res = new Halogen_VDom_Machine.Step(node, patch(node, v1.value0), done(node));
+                  var $87 = s1 === v1.value0;
+                  if ($87) {
+                      return Control_Applicative.pure(Control_Monad_Eff.applicativeEff)(res);
+                  };
+                  return function __do() {
+                      Halogen_VDom_Util.setTextContent(v1.value0, node)();
+                      return res;
+                  };
+              };
+              return function __do() {
+                  done(node)();
+                  return buildVDom(v)(v1)();
+              };
+          };
+      };
+      var render = function (s) {
+          return function __do() {
+              var v1 = Halogen_VDom_Util.createTextNode(s, v.document)();
+              return new Halogen_VDom_Machine.Step(v1, patch(v1, s), done(v1));
+          };
+      };
+      return render;
+  };
+  var buildKeyed = function (v) {
+      var done = function (node, attrs, steps) {
+          return function __do() {
+              var v1 = Halogen_VDom_Util.unsafeParent(node);
+              Halogen_VDom_Util.removeChild(node, v1)();
+              Halogen_VDom_Util.forInE(steps, function (v2, v3) {
+                  return v3.value2;
+              })();
+              return Halogen_VDom_Machine.halt(attrs)();
+          };
+      };
+      var patch = function (node, attrs, v1, ch1, len1) {
+          return function (v2) {
+              if (v2 instanceof Halogen_VDom_Types.Grafted) {
+                  return patch(node, attrs, v1, ch1, len1)(Halogen_VDom_Types.runGraft(v2.value0));
+              };
+              if (v2 instanceof Halogen_VDom_Types.Keyed && eqElemSpec(v1, v2.value0)) {
+                  var $101 = Data_Array.length(v2.value1);
+                  if (len1 === 0 && $101 === 0) {
+                      return function __do() {
+                          var v3 = Halogen_VDom_Machine.step(attrs)(v2.value0.value2)();
+                          return new Halogen_VDom_Machine.Step(node, patch(node, v3, v2.value0, ch1, 0), done(node, v3, ch1));
+                      };
+                  };
+                  var onThis = function (k, v3) {
+                      return v3.value2;
+                  };
+                  var onThese = function (k, ix$prime, v3, v4) {
+                      return function __do() {
+                          var v5 = v3.value1(v4.value1)();
+                          Halogen_VDom_Util.insertChildIx(ix$prime, v5.value0, node)();
+                          return v5;
+                      };
+                  };
+                  var onThat = function (k, ix, v3) {
+                      return function __do() {
+                          var v4 = buildVDom(v)(v3.value1)();
+                          Halogen_VDom_Util.insertChildIx(ix, v4.value0, node)();
+                          return v4;
+                      };
+                  };
+                  return function __do() {
+                      var v3 = Halogen_VDom_Util.diffWithKeyAndIxE(ch1, v2.value1, Data_Tuple.fst, onThese, onThis, onThat)();
+                      var v4 = Halogen_VDom_Machine.step(attrs)(v2.value0.value2)();
+                      return new Halogen_VDom_Machine.Step(node, patch(node, v4, v2.value0, v3, $101), done(node, v4, v3));
+                  };
+              };
+              return function __do() {
+                  done(node, attrs, ch1)();
+                  return buildVDom(v)(v2)();
+              };
+          };
+      };
+      var render = function (v1) {
+          return function (ch1) {
+              return function __do() {
+                  var v2 = Halogen_VDom_Util.createElement(Data_Nullable.toNullable(v1.value0), v1.value1, v.document)();
+                  var node = DOM_Node_Types.elementToNode(v2);
+                  var onChild = function (k, ix, v3) {
+                      return function __do() {
+                          var v4 = buildVDom(v)(v3.value1)();
+                          Halogen_VDom_Util.insertChildIx(ix, v4.value0, node)();
+                          return v4;
+                      };
+                  };
+                  var v3 = Halogen_VDom_Util.strMapWithIxE(ch1, Data_Tuple.fst, onChild)();
+                  var v4 = v.buildAttributes(v2)(v1.value2)();
+                  return new Halogen_VDom_Machine.Step(node, patch(node, v4, v1, v3, Data_Array.length(ch1)), done(node, v4, v3));
+              };
+          };
+      };
+      return render;
+  };
+  var buildElem = function (v) {
+      var done = function (node, attrs, steps) {
+          return function __do() {
+              var v1 = Halogen_VDom_Util.unsafeParent(node);
+              Halogen_VDom_Util.removeChild(node, v1)();
+              Control_Monad_Eff.foreachE(steps)(Halogen_VDom_Machine.halt)();
+              return Halogen_VDom_Machine.halt(attrs)();
+          };
+      };
+      var patch = function (node, attrs, v1, ch1) {
+          return function (v2) {
+              if (v2 instanceof Halogen_VDom_Types.Grafted) {
+                  return patch(node, attrs, v1, ch1)(Halogen_VDom_Types.runGraft(v2.value0));
+              };
+              if (v2 instanceof Halogen_VDom_Types.Elem && eqElemSpec(v1, v2.value0)) {
+                  var $155 = Data_Array.length(ch1);
+                  var $156 = Data_Array.length(v2.value1);
+                  if ($155 === 0 && $156 === 0) {
+                      return function __do() {
+                          var v3 = Halogen_VDom_Machine.step(attrs)(v2.value0.value2)();
+                          return new Halogen_VDom_Machine.Step(node, patch(node, v3, v2.value0, ch1), done(node, v3, ch1));
+                      };
+                  };
+                  var onThis = function (ix, v3) {
+                      return v3.value2;
+                  };
+                  var onThese = function (ix, v3, vdom) {
+                      return function __do() {
+                          var v4 = v3.value1(vdom)();
+                          Halogen_VDom_Util.insertChildIx(ix, v4.value0, node)();
+                          return v4;
+                      };
+                  };
+                  var onThat = function (ix, vdom) {
+                      return function __do() {
+                          var v3 = buildVDom(v)(vdom)();
+                          Halogen_VDom_Util.insertChildIx(ix, v3.value0, node)();
+                          return v3;
+                      };
+                  };
+                  return function __do() {
+                      var v3 = Halogen_VDom_Util.diffWithIxE(ch1, v2.value1, onThese, onThis, onThat)();
+                      var v4 = Halogen_VDom_Machine.step(attrs)(v2.value0.value2)();
+                      return new Halogen_VDom_Machine.Step(node, patch(node, v4, v2.value0, v3), done(node, v4, v3));
+                  };
+              };
+              return function __do() {
+                  done(node, attrs, ch1)();
+                  return buildVDom(v)(v2)();
+              };
+          };
+      };
+      var render = function (v1) {
+          return function (ch1) {
+              return function __do() {
+                  var v2 = Halogen_VDom_Util.createElement(Data_Nullable.toNullable(v1.value0), v1.value1, v.document)();
+                  var node = DOM_Node_Types.elementToNode(v2);
+                  var onChild = function (ix, child) {
+                      return function __do() {
+                          var v3 = buildVDom(v)(child)();
+                          Halogen_VDom_Util.insertChildIx(ix, v3.value0, node)();
+                          return v3;
+                      };
+                  };
+                  var v3 = Halogen_VDom_Util.forE(ch1, onChild)();
+                  var v4 = v.buildAttributes(v2)(v1.value2)();
+                  return new Halogen_VDom_Machine.Step(node, patch(node, v4, v1, v3), done(node, v4, v3));
+              };
+          };
+      };
+      return render;
+  };
+  exports["buildElem"] = buildElem;
+  exports["buildKeyed"] = buildKeyed;
+  exports["buildText"] = buildText;
+  exports["buildVDom"] = buildVDom;
+  exports["buildWidget"] = buildWidget;
+})(PS["Halogen.VDom.DOM"] = PS["Halogen.VDom.DOM"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
+  "use strict";
+  var Prelude = PS["Prelude"];
+  var Control_Monad_Aff = PS["Control.Monad.Aff"];
+  var Control_Monad_Eff = PS["Control.Monad.Eff"];
+  var Control_Monad_Eff_Class = PS["Control.Monad.Eff.Class"];
+  var Control_Monad_Eff_Ref = PS["Control.Monad.Eff.Ref"];
+  var Data_Foldable = PS["Data.Foldable"];
+  var Data_Maybe = PS["Data.Maybe"];
+  var Data_Nullable = PS["Data.Nullable"];
+  var DOM = PS["DOM"];
+  var DOM_HTML = PS["DOM.HTML"];
+  var DOM_HTML_Types = PS["DOM.HTML.Types"];
+  var DOM_HTML_Window = PS["DOM.HTML.Window"];
+  var DOM_Node_Node = PS["DOM.Node.Node"];
+  var DOM_Node_Types = PS["DOM.Node.Types"];
+  var Halogen_Aff_Driver = PS["Halogen.Aff.Driver"];
+  var Halogen_Aff_Driver_State = PS["Halogen.Aff.Driver.State"];
+  var Halogen_Aff_Effects = PS["Halogen.Aff.Effects"];
+  var Halogen_Component = PS["Halogen.Component"];
+  var Halogen_HTML_Core = PS["Halogen.HTML.Core"];
+  var Halogen_Query_InputF = PS["Halogen.Query.InputF"];
+  var Halogen_VDom = PS["Halogen.VDom"];
+  var Halogen_VDom_DOM_Prop = PS["Halogen.VDom.DOM.Prop"];
+  var Unsafe_Reference = PS["Unsafe.Reference"];
+  var Data_Function = PS["Data.Function"];
+  var Data_Functor = PS["Data.Functor"];
+  var Control_Applicative = PS["Control.Applicative"];
+  var Data_Unit = PS["Data.Unit"];
+  var Control_Bind = PS["Control.Bind"];
+  var Halogen_VDom_Machine = PS["Halogen.VDom.Machine"];
+  var Halogen_VDom_DOM = PS["Halogen.VDom.DOM"];
+  var Data_HeytingAlgebra = PS["Data.HeytingAlgebra"];
+  var Control_Category = PS["Control.Category"];
+  var substInParent = function (v) {
+      return function (v1) {
+          return function (v2) {
+              if (v1 instanceof Data_Maybe.Just && v2 instanceof Data_Maybe.Just) {
+                  return Data_Functor["void"](Control_Monad_Eff.functorEff)(DOM_Node_Node.insertBefore(v)(v1.value0)(v2.value0));
+              };
+              if (v1 instanceof Data_Maybe.Nothing && v2 instanceof Data_Maybe.Just) {
+                  return Data_Functor["void"](Control_Monad_Eff.functorEff)(DOM_Node_Node.appendChild(v)(v2.value0));
+              };
+              return Control_Applicative.pure(Control_Monad_Eff.applicativeEff)(Data_Unit.unit);
+          };
+      };
+  };
+  var removeChild = function (v) {
+      return function __do() {
+          var v1 = DOM_Node_Node.parentNode(v.node)();
+          return Data_Foldable.traverse_(Control_Monad_Eff.applicativeEff)(Data_Foldable.foldableMaybe)(function (pn) {
+              return DOM_Node_Node.removeChild(v.node)(pn);
+          })(Data_Nullable.toMaybe(v1))();
+      };
+  };
+  var mkSpec = function (handler) {
+      return function (renderChildRef) {
+          return function (document) {
+              var done = Control_Applicative.pure(Control_Monad_Eff.applicativeEff)(Data_Unit.unit);
+              var patch = function (slot) {
+                  return function __do() {
+                      var v = Control_Monad_Eff_Ref.readRef(renderChildRef)();
+                      var v1 = v(slot)();
+                      var node = Halogen_Aff_Driver_State.unRenderStateX(function (v2) {
+                          return v2.node;
+                      })(v1);
+                      return new Halogen_VDom_Machine.Step(node, patch, done);
+                  };
+              };
+              var buildWidget = function (spec) {
+                  return function (slot) {
+                      return function __do() {
+                          var v = Control_Monad_Eff_Ref.readRef(renderChildRef)();
+                          var v1 = v(slot)();
+                          var node = Halogen_Aff_Driver_State.unRenderStateX(function (v2) {
+                              return v2.node;
+                          })(v1);
+                          return new Halogen_VDom_Machine.Step(node, patch, done);
+                      };
+                  };
+              };
+              var buildAttributes = Halogen_VDom_DOM_Prop.buildProp(handler);
+              return {
+                  buildWidget: buildWidget, 
+                  buildAttributes: buildAttributes, 
+                  document: document
+              };
+          };
+      };
+  };
+  var renderSpec = function (document) {
+      return function (container) {
+          var render = function (handler) {
+              return function (child) {
+                  return function (v) {
+                      return function (v1) {
+                          if (v1 instanceof Data_Maybe.Nothing) {
+                              return function __do() {
+                                  var v2 = Control_Monad_Eff_Ref.newRef(child)();
+                                  var spec = mkSpec(handler)(v2)(document);
+                                  var v3 = Halogen_VDom_DOM.buildVDom(spec)(v)();
+                                  var node = Halogen_VDom_Machine.extract(v3);
+                                  DOM_Node_Node.appendChild(node)(DOM_HTML_Types.htmlElementToNode(container))();
+                                  return {
+                                      machine: v3, 
+                                      node: node, 
+                                      renderChildRef: v2
+                                  };
+                              };
+                          };
+                          if (v1 instanceof Data_Maybe.Just) {
+                              return function __do() {
+                                  Control_Monad_Eff_Ref.writeRef(v1.value0.renderChildRef)(child)();
+                                  var v2 = DOM_Node_Node.parentNode(v1.value0.node)();
+                                  var v3 = DOM_Node_Node.nextSibling(v1.value0.node)();
+                                  var v4 = Halogen_VDom_Machine.step(v1.value0.machine)(v)();
+                                  var newNode = Halogen_VDom_Machine.extract(v4);
+                                  Control_Applicative.when(Control_Monad_Eff.applicativeEff)(Data_HeytingAlgebra.not(Data_HeytingAlgebra.heytingAlgebraFunction(Data_HeytingAlgebra.heytingAlgebraFunction(Data_HeytingAlgebra.heytingAlgebraBoolean)))(Unsafe_Reference.unsafeRefEq)(v1.value0.node)(newNode))(substInParent(newNode)(Data_Nullable.toMaybe(v3))(Data_Nullable.toMaybe(v2)))();
+                                  return {
+                                      machine: v4, 
+                                      node: newNode, 
+                                      renderChildRef: v1.value0.renderChildRef
+                                  };
+                              };
+                          };
+                          throw new Error("Failed pattern match at Halogen.VDom.Driver line 119, column 5 - line 135, column 80: " + [ v1.constructor.name ]);
+                      };
+                  };
+              };
+          };
+          return {
+              render: render, 
+              renderChild: Control_Category.id(Control_Category.categoryFn), 
+              removeChild: removeChild
+          };
+      };
+  };
+  var runUI = function (component) {
+      return function (i) {
+          return function (element) {
+              return Control_Bind.bind(Control_Monad_Aff.bindAff)(Control_Monad_Eff_Class.liftEff(Control_Monad_Aff.monadEffAff)(Data_Functor.map(Control_Monad_Eff.functorEff)(DOM_HTML_Types.htmlDocumentToDocument)(Control_Bind.bindFlipped(Control_Monad_Eff.bindEff)(DOM_HTML_Window.document)(DOM_HTML.window))))(function (v) {
+                  return Halogen_Aff_Driver.runUI(renderSpec(v)(element))(component)(i);
+              });
+          };
+      };
+  };
+  exports["runUI"] = runUI;
+})(PS["Halogen.VDom.Driver"] = PS["Halogen.VDom.Driver"] || {});
+(function(exports) {
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Data_Either = PS["Data.Either"];
@@ -8708,7 +9129,7 @@ var PS = {};
   exports["shiftAccountNumberRight"] = shiftAccountNumberRight;
 })(PS["ModulusCheck.Data.AccountNumber"] = PS["ModulusCheck.Data.AccountNumber"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Data_Maybe = PS["Data.Maybe"];
@@ -8742,14 +9163,14 @@ var PS = {};
   var zeroiseUtoB = function (row) {
       var zeroPrefix = Data_Functor.map(Data_List_Types.functorList)(Data_Function["const"](0))(Data_List.range(1)(8));
       var drop8 = Data_List.drop(8)(row.weights);
-      var $1 = {};
-      for (var $2 in row) {
-          if (row.hasOwnProperty($2)) {
-              $1[$2] = row[$2];
+      var $2 = {};
+      for (var $3 in row) {
+          if ({}.hasOwnProperty.call(row, $3)) {
+              $2[$3] = row[$3];
           };
       };
-      $1.weights = Data_List.concat(new Data_List_Types.Cons(zeroPrefix, new Data_List_Types.Cons(drop8, Data_List_Types.Nil.value)));
-      return $1;
+      $2.weights = Data_List.concat(new Data_List_Types.Cons(zeroPrefix, new Data_List_Types.Cons(drop8, Data_List_Types.Nil.value)));
+      return $2;
   };
   var checkRow = function (from) {
       return function (to) {
@@ -8775,7 +9196,7 @@ var PS = {};
   exports["zeroiseUtoB"] = zeroiseUtoB;
 })(PS["ModulusCheck.Data.CheckRow"] = PS["ModulusCheck.Data.CheckRow"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Data_Foldable = PS["Data.Foldable"];
@@ -8794,22 +9215,22 @@ var PS = {};
       return function (str) {
           var updatePosChar = function (v) {
               return function (c) {
-                  if (c === "\n") {
+                  if (c === "\x0a") {
                       return {
                           line: v.line + 1 | 0, 
                           column: 1
                       };
                   };
-                  if (c === "\r") {
+                  if (c === "\x0d") {
                       return {
                           line: v.line + 1 | 0, 
                           column: 1
                       };
                   };
-                  if (c === "\t") {
+                  if (c === "\x09") {
                       return {
                           line: v.line, 
-                          column: (v.column + 8 | 0) - (v.column - 1) % 8
+                          column: (v.column + 8 | 0) - (v.column - 1 | 0) % 8 | 0
                       };
                   };
                   return {
@@ -8829,7 +9250,7 @@ var PS = {};
   exports["updatePosString"] = updatePosString;
 })(PS["Text.Parsing.Parser.Pos"] = PS["Text.Parsing.Parser.Pos"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Alt = PS["Control.Alt"];
@@ -8995,7 +9416,7 @@ var PS = {};
   exports["alternativeParserT"] = alternativeParserT;
 })(PS["Text.Parsing.Parser"] = PS["Text.Parsing.Parser"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Monad_Except = PS["Control.Monad.Except"];
@@ -9018,8 +9439,8 @@ var PS = {};
   var Data_Unit = PS["Data.Unit"];
   var Data_List_Types = PS["Data.List.Types"];
   var Data_Function = PS["Data.Function"];
-  var Data_Functor = PS["Data.Functor"];
-  var Control_Apply = PS["Control.Apply"];        
+  var Control_Apply = PS["Control.Apply"];
+  var Data_Functor = PS["Data.Functor"];        
   var withErrorMessage = function (dictMonad) {
       return function (p) {
           return function (msg) {
@@ -9043,9 +9464,9 @@ var PS = {};
       return function (p) {
           return function (sep) {
               return Control_Bind.bind(Text_Parsing_Parser.bindParserT(dictMonad))(p)(function (v) {
-                  return Control_Alt.alt(Text_Parsing_Parser.altParserT(dictMonad))(Control_Bind.bind(Text_Parsing_Parser.bindParserT(dictMonad))(sep)(function () {
-                      return Control_Bind.bind(Text_Parsing_Parser.bindParserT(dictMonad))(sepEndBy(dictMonad)(p)(sep))(function (v1) {
-                          return Control_Applicative.pure(Text_Parsing_Parser.applicativeParserT(dictMonad))(new Data_List_Types.Cons(v, v1));
+                  return Control_Alt.alt(Text_Parsing_Parser.altParserT(dictMonad))(Control_Bind.bind(Text_Parsing_Parser.bindParserT(dictMonad))(sep)(function (v1) {
+                      return Control_Bind.bind(Text_Parsing_Parser.bindParserT(dictMonad))(sepEndBy(dictMonad)(p)(sep))(function (v2) {
+                          return Control_Applicative.pure(Text_Parsing_Parser.applicativeParserT(dictMonad))(new Data_List_Types.Cons(v, v2));
                       });
                   }))(Control_Applicative.pure(Text_Parsing_Parser.applicativeParserT(dictMonad))(Data_List.singleton(v)));
               });
@@ -9061,9 +9482,7 @@ var PS = {};
   };
   var optional = function (dictMonad) {
       return function (p) {
-          return Control_Alt.alt(Text_Parsing_Parser.altParserT(dictMonad))(Control_Bind.bind(Text_Parsing_Parser.bindParserT(dictMonad))(p)(function () {
-              return Control_Applicative.pure(Text_Parsing_Parser.applicativeParserT(dictMonad))(Data_Unit.unit);
-          }))(Control_Applicative.pure(Text_Parsing_Parser.applicativeParserT(dictMonad))(Data_Unit.unit));
+          return Control_Alt.alt(Text_Parsing_Parser.altParserT(dictMonad))(Data_Functor["void"](Text_Parsing_Parser.functorParserT(((dictMonad["__superclass_Control.Bind.Bind_1"]())["__superclass_Control.Apply.Apply_0"]())["__superclass_Data.Functor.Functor_0"]()))(p))(Control_Applicative.pure(Text_Parsing_Parser.applicativeParserT(dictMonad))(Data_Unit.unit));
       };
   };
   var option = function (dictMonad) {
@@ -9087,7 +9506,7 @@ var PS = {};
   exports["withErrorMessage"] = withErrorMessage;
 })(PS["Text.Parsing.Parser.Combinators"] = PS["Text.Parsing.Parser.Combinators"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Data_String = PS["Data.String"];
   var Control_Monad_State = PS["Control.Monad.State"];
@@ -9107,7 +9526,7 @@ var PS = {};
   var Data_Function = PS["Data.Function"];
   var Data_Eq = PS["Data.Eq"];
   var Data_HeytingAlgebra = PS["Data.HeytingAlgebra"];
-  var Data_Unit = PS["Data.Unit"];        
+  var Data_Functor = PS["Data.Functor"];        
   var StringLike = function (drop, indexOf, $$null, uncons) {
       this.drop = drop;
       this.indexOf = indexOf;
@@ -9202,7 +9621,7 @@ var PS = {};
   exports["stringLikeString"] = stringLikeString;
 })(PS["Text.Parsing.Parser.String"] = PS["Text.Parsing.Parser.String"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Data_Array = PS["Data.Array"];
   var Data_Char_Unicode = PS["Data.Char.Unicode"];
@@ -9253,7 +9672,7 @@ var PS = {};
   exports["digit"] = digit;
 })(PS["Text.Parsing.Parser.Token"] = PS["Text.Parsing.Parser.Token"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Alt = PS["Control.Alt"];
@@ -9287,7 +9706,7 @@ var PS = {};
   var Control_Semigroupoid = PS["Control.Semigroupoid"];
   var Data_Semiring = PS["Data.Semiring"];        
   var whiteSpace = Control_Bind.bind(Text_Parsing_Parser.bindParserT(Data_Identity.monadIdentity))(Data_List.many(Text_Parsing_Parser.alternativeParserT(Data_Identity.monadIdentity))(Text_Parsing_Parser.lazyParserT)(Text_Parsing_Parser_String.satisfy(Text_Parsing_Parser_String.stringLikeString)(Data_Identity.monadIdentity)(function (c) {
-      return c === " " || c === "\t";
+      return c === " " || c === "\x09";
   })))(function () {
       return Control_Applicative.pure(Text_Parsing_Parser.applicativeParserT(Data_Identity.monadIdentity))(Data_Unit.unit);
   });
@@ -9325,7 +9744,7 @@ var PS = {};
                           return a;
                       };
                       if (j > 1) {
-                          var __tco_j = j - 1;
+                          var __tco_j = j - 1 | 0;
                           var __tco_a = Control_Apply.apply(Text_Parsing_Parser.applyParserT(Data_Identity.monadIdentity))(Data_Functor.map(Text_Parsing_Parser.functorParserT(Data_Identity.functorIdentity))(Data_List_Types.Cons.create)(p))(a);
                           j = __tco_j;
                           a = __tco_a;
@@ -9352,7 +9771,7 @@ var PS = {};
       });
   };
   var eol = Control_Bind.bind(Text_Parsing_Parser.bindParserT(Data_Identity.monadIdentity))(Data_List.many(Text_Parsing_Parser.alternativeParserT(Data_Identity.monadIdentity))(Text_Parsing_Parser.lazyParserT)(Text_Parsing_Parser_String.satisfy(Text_Parsing_Parser_String.stringLikeString)(Data_Identity.monadIdentity)(function (c) {
-      return c === "\n" || c === "\r";
+      return c === "\x0a" || c === "\x0d";
   })))(function () {
       return Control_Applicative.pure(Text_Parsing_Parser.applicativeParserT(Data_Identity.monadIdentity))(Data_Unit.unit);
   });
@@ -9379,7 +9798,7 @@ var PS = {};
       });
   });
   var signedIntegerParser = Control_Alt.alt(Text_Parsing_Parser.altParserT(Data_Identity.monadIdentity))(Control_Bind.bind(Text_Parsing_Parser.bindParserT(Data_Identity.monadIdentity))(Control_Apply.applySecond(Text_Parsing_Parser.applyParserT(Data_Identity.monadIdentity))(Text_Parsing_Parser_String.string(Text_Parsing_Parser_String.stringLikeString)(Data_Identity.monadIdentity)("-"))(integerParser))(function (x) {
-      return Control_Applicative.pure(Text_Parsing_Parser.applicativeParserT(Data_Identity.monadIdentity))(-x);
+      return Control_Applicative.pure(Text_Parsing_Parser.applicativeParserT(Data_Identity.monadIdentity))(-x | 0);
   }))(integerParser);
   exports["digitsParser"] = digitsParser;
   exports["eol"] = eol;
@@ -9392,7 +9811,7 @@ var PS = {};
   exports["whiteSpace"] = whiteSpace;
 })(PS["ModulusCheck.Parsers"] = PS["ModulusCheck.Parsers"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Alt = PS["Control.Alt"];
@@ -9416,7 +9835,7 @@ var PS = {};
   exports["checkRowTableParser"] = checkRowTableParser;
 })(PS["ModulusCheck.Data.CheckRow.Parser"] = PS["ModulusCheck.Data.CheckRow.Parser"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Data_Map = PS["Data.Map"];
@@ -9443,15 +9862,15 @@ var PS = {};
   exports["sortCodeSubstitutionTableParser"] = sortCodeSubstitutionTableParser;
 })(PS["ModulusCheck.Data.SubstitutionRow.Parser"] = PS["ModulusCheck.Data.SubstitutionRow.Parser"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
-  var valacdos_v400 = "\n  010004 016715 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  050000 050020 MOD11    0    0    0    0    0    0    2    1    7    5    8    2    4    1\n  050022 058999 MOD11    0    0    0    0    0    0    2    1    7    5    8    2    4    1\n  070116 070116 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1  12\n  070116 070116 MOD10    0    3    2    4    5    8    9    4    5    6    7    8    9   -1  13\n  070246 070246 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1\n  070436 070436 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1\n  070806 070806 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1\n  070976 070976 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1\n  071096 071096 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1\n  071226 071226 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1\n  071306 071306 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1\n  071986 071986 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1\n  074456 074456 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1  12\n  074456 074456 MOD10    0    3    2    4    5    8    9    4    5    6    7    8    9   -1  13\n  080211 080211 MOD10    0    0    0    0    0    0    7    1    3    7    1    3    7    1\n  080228 080228 MOD10    0    0    0    0    0    0    7    1    3    7    1    3    7    1\n  086001 086001 MOD10    0    0    0    0    0    0    7    1    3    7    1    3    7    1\n  086020 086020 MOD10    0    0    0    0    0    0    7    1    3    7    1    3    7    1\n  086086 086086 MOD11    0    0    0    0    0    8    9    4    5    6    7    8    9   -1\n  086090 086090 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1   8\n  089000 089999 MOD10    0    0    0    0    0    0    7    1    3    7    1    3    7    1\n  090013 090013 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\n  090105 090105 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\n  090118 090118 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\n  090126 090129 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\n  090131 090136 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\n  090150 090156 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\n  090180 090185 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\n  090190 090196 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\n  090204 090204 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\n  090222 090222 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\n  090356 090356 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\n  090500 090599 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\n  090704 090704 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\n  090705 090705 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\n  090710 090710 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\n  090715 090715 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\n  090720 090726 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\n  090736 090739 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\n  090790 090790 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\n  091600 091600 MOD10    0    0    0    0    0    1    7    1    3    7    1    3    7    1\n  091601 091601 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\n  091740 091743 MOD10    0    0    0    0    0    1    7    1    3    7    1    3    7    1\n  091800 091809 MOD10    0    0    0    0    0    1    7    1    3    7    1    3    7    1\n  091811 091865 MOD10    0    0    0    0    0    1    7    1    3    7    1    3    7    1\n  100000 101099 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  101101 101498 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  101500 101999 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  102400 107999 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  108000 108079 MOD11    0    0    0    0    0    3    2    7    6    5    4    3    2    1\n  108080 108099 MOD11    0    0    0    0    4    3    2    7    6    5    4    3    2    1\n  108100 109999 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  110000 119280 DBLAL    0    0    2    1    2    1    2    1    2    1    2    1    2    1   1\n  119282 119283 DBLAL    0    0    2    1    2    1    2    1    2    1    2    1    2    1   1\n  119285 119999 DBLAL    0    0    2    1    2    1    2    1    2    1    2    1    2    1   1\n  120000 120961 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  120963 122009 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  122011 122101 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  122103 122129 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  122131 122135 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  122213 122299 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  122400 122999 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  124000 124999 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  133000 133999 MOD11    0    0    0    0    0   10    7    8    4    6    3    5    2    1\n  134012 134020 MOD11    0    0    0    7    5    9    8    4    6    3    5    2    0    0   4\n  134121 134121 MOD11    0    0    0    1    0    0    8    4    6    3    5    2    0    0   4\n  150000 158000 MOD11    4    3    0    0    0    0    2    7    6    5    4    3    2    1\n  159800 159800 MOD11    0    0    0    0    0    0    7    6    5    4    3    2    1    0\n  159900 159900 MOD11    0    0    0    0    0    0    7    6    5    4    3    2    1    0\n  159910 159910 MOD11    0    0    0    0    0    0    7    6    5    4    3    2    1    0\n  160000 161027 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\n  161029 161029 MOD11    0    0    0    0    0    0    2    7    6    5    4    3    2    1\n  161030 161041 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\n  161050 161050 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\n  161055 161055 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\n  161060 161060 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\n  161065 161065 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\n  161070 161070 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\n  161075 161075 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\n  161080 161080 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\n  161085 161085 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\n  161090 161090 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\n  161100 162028 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\n  162030 164300 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\n  165901 166001 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\n  166050 167600 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\n  168600 168600 MOD11    0    0    0    0    0    0    2    7    6    5    4    3    2    1\n  170000 179499 MOD11    0    0    4    2    7    9    2    7    6    5    4    3    2    1\n  180002 180002 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\n  180005 180005 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\n  180009 180009 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\n  180036 180036 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\n  180038 180038 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\n  180091 180092 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\n  180104 180104 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\n  180109 180110 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\n  180156 180156 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\n  185001 185001 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\n  185003 185025 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  185027 185099 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  200000 200002 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  200000 200002 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  200004 200004 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  200004 200004 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  200051 200077 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  200051 200077 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  200079 200097 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  200079 200097 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  200099 200156 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  200099 200156 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  200158 200387 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  200158 200387 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  200403 200405 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  200403 200405 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  200407 200407 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  200407 200407 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  200411 200412 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  200411 200412 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  200414 200423 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  200414 200423 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  200425 200899 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  200425 200899 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  200901 201159 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  200901 201159 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  201161 201177 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  201161 201177 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  201179 201351 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  201179 201351 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  201353 202698 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  201353 202698 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  202700 203239 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  202700 203239 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  203241 203255 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  203241 203255 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  203259 203519 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  203259 203519 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  203521 204476 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  203521 204476 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  204478 205475 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  204478 205475 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  205477 205954 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  205477 205954 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  205956 206124 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  205956 206124 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  206126 206157 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  206126 206157 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  206159 206390 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  206159 206390 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  206392 206799 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  206392 206799 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  206802 206874 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  206802 206874 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  206876 207170 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  206876 207170 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  207173 208092 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  207173 208092 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  208094 208721 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  208094 208721 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  208723 209034 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  208723 209034 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  209036 209128 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  209036 209128 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  209130 209999 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\n  209130 209999 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\n  230338 230338 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  230338 230338 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  230580 230580 MOD11    0    0    0    0    0    0    2    7    6    5    4    3    2    1  12\n  230580 230580 MOD11    0    0    0    0    0    0    5    7    6    5    4    3    2    1  13\n  230614 230614 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  230614 230614 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  230709 230709 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  230709 230709 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  230872 230872 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  230872 230872 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  230933 230933 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  230933 230933 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  231018 231018 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  231018 231018 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  231213 231213 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  231213 231213 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  231354 231354 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  231354 231354 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  231469 231469 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  231469 231469 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  231558 231558 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  231558 231558 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  231679 231679 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  231679 231679 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  231843 231843 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  231843 231843 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  231985 231985 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  231985 231985 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  232130 232130 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  232130 232130 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  232279 232279 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  232279 232279 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  232283 232283 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  232283 232283 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  232445 232445 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  232445 232445 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  232571 232571 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  232571 232571 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  232636 232636 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  232636 232636 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  232704 232704 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  232704 232704 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  232725 232725 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  232725 232725 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  232813 232813 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  232813 232813 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  232939 232939 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  232939 232939 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  233080 233080 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  233080 233080 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  233142 233142 MOD10    2    1    2    1    2    1   30   36   24   20   16   12    8    4\n  233171 233171 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  233171 233171 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  233188 233188 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  233188 233188 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  233231 233231 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  233231 233231 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  233344 233344 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  233344 233344 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  233438 233438 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  233438 233438 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  233456 233456 MOD10    2    1    2    1    2    1    0   64   32   16    8    4    2    1\n  233483 233483 MOD11    0    0    0    0    0    0    2    7    6    5    4    3    2    1\n  233556 233556 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  233556 233556 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  233658 233658 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  233658 233658 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  233693 233693 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  233693 233693 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  233752 233752 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  233752 233752 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  234081 234081 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  234081 234081 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  234193 234193 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  234193 234193 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  234252 234252 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  234252 234252 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  234321 234321 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  234321 234321 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  234377 234377 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  234377 234377 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  234570 234570 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  234570 234570 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  234666 234666 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  234666 234666 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  234779 234779 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  234779 234779 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  234828 234828 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  234828 234828 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  234985 234985 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  234985 234985 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  235054 235054 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  235054 235054 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  235164 235164 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  235164 235164 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  235262 235262 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  235262 235262 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  235323 235323 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  235323 235323 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  235451 235451 MOD11    0    0    0    0    0    0    2    7    6    5    4    3    2    1\n  235459 235459 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  235459 235459 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  235519 235519 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  235519 235519 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  235676 235676 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  235676 235676 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  235711 235711 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  235711 235711 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  235756 235756 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  235756 235756 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  235945 235945 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  235945 235945 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  236006 236006 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  236006 236006 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  236119 236119 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  236119 236119 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  236233 236233 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  236233 236233 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  236247 236247 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  236293 236293 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  236293 236293 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  236422 236422 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  236422 236422 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  236527 236527 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  236527 236527 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  236538 236538 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  236538 236538 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  236643 236643 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  236643 236643 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  236761 236761 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  236761 236761 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  236907 236907 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  236907 236907 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  237130 237130 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  237130 237130 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  237265 237265 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  237265 237265 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  237355 237355 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  237355 237355 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  237423 237423 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  237423 237423 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  237427 237427 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  237427 237427 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  237563 237563 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  237563 237563 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  237622 237622 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  237622 237622 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  237728 237728 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  237728 237728 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  237873 237873 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  237873 237873 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  238020 238020 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  238020 238020 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  238043 238043 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  238043 238043 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  238051 238051 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  238051 238051 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  238175 238175 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  238175 238175 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  238257 238257 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  238257 238257 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  238392 238431 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\n  238392 238431 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  238432 238432 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  238432 238432 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  238433 238583 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\n  238433 238583 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  238585 238590 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\n  238585 238590 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  238599 238599 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  238599 238599 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  238613 238613 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  238613 238613 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  238672 238672 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  238672 238672 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  238717 238717 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  238717 238717 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  238890 238899 MOD11    0    0    0    0    4    3    2    7    6    5    4    3    2    1\n  238908 238908 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  238908 238908 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  239071 239071 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  239071 239071 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  239126 239126 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  239126 239126 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  239136 239140 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\n  239136 239140 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  239143 239144 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\n  239143 239144 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  239282 239283 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\n  239282 239283 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  239285 239294 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\n  239285 239294 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  239295 239295 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  239295 239295 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  239296 239318 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\n  239296 239318 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  239360 239360 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  239360 239360 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  239380 239380 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  239380 239380 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  239435 239435 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  239435 239435 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  239525 239525 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  239525 239525 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  239642 239642 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  239642 239642 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  239751 239751 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  239751 239751 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  300000 300006 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  300000 300006 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  300008 300009 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  300008 300009 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  300050 300051 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  300134 300138 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  300134 300138 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  300161 300161 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1\n  300176 300176 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1\n  301001 301001 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301001 301001 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301004 301004 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301004 301004 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301007 301007 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301007 301007 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301012 301012 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301012 301012 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301022 301022 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301027 301027 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301047 301047 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301047 301047 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301049 301049 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301049 301049 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301052 301052 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301052 301052 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301075 301076 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301075 301076 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301108 301108 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301108 301108 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301112 301112 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301112 301112 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301127 301127 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301127 301127 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301137 301137 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301142 301142 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301148 301148 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301148 301148 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301154 301155 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301161 301161 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301161 301161 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301166 301166 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301170 301170 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301174 301175 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301174 301175 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301191 301191 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301191 301191 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301194 301195 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301194 301195 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301204 301205 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301204 301205 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301209 301210 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301209 301210 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301215 301215 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301215 301215 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301218 301218 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301218 301218 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301220 301221 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301220 301221 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301234 301234 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301234 301234 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301251 301251 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301251 301251 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301259 301259 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301259 301259 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301274 301274 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301274 301274 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301280 301280 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301280 301280 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301286 301286 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301286 301286 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301295 301296 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301295 301296 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301299 301299 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301299 301299 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301301 301301 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301301 301301 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301305 301305 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301305 301305 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301318 301318 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301318 301318 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301330 301330 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301330 301330 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301332 301332 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301332 301332 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301335 301335 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301335 301335 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301342 301342 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301342 301342 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301350 301355 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301350 301355 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301364 301364 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301364 301364 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301368 301368 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301368 301368 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301376 301376 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301376 301376 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301380 301380 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301380 301380 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301388 301388 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301388 301388 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301390 301390 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301390 301390 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301395 301395 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301395 301395 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301400 301400 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301400 301400 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301424 301424 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301424 301424 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301432 301432 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301432 301432 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301433 301433 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301435 301435 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301437 301437 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301437 301437 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301439 301439 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301440 301440 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301440 301440 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301443 301443 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301444 301444 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301444 301444 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301447 301447 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301447 301447 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301451 301451 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301451 301451 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301456 301456 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301456 301456 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301458 301458 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301460 301460 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301460 301460 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301463 301463 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301464 301464 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301464 301464 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301466 301466 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301469 301469 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301469 301469 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301471 301471 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301471 301471 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301474 301474 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301477 301477 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301477 301477 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301482 301482 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301483 301483 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301483 301483 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301485 301485 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301487 301487 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301504 301504 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301504 301504 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301510 301510 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301514 301514 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301517 301517 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301525 301525 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301539 301539 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301539 301539 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301542 301542 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301542 301542 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301552 301553 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301552 301553 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301557 301557 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301557 301557 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301573 301573 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301593 301593 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301593 301593 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301595 301595 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301595 301595 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301597 301597 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301597 301597 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301599 301599 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301599 301599 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301607 301607 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301609 301609 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301609 301609 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301611 301611 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301611 301611 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301620 301620 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301620 301620 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301628 301628 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301628 301628 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301634 301634 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301634 301634 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301641 301642 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301641 301642 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301653 301653 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301653 301653 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301657 301657 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301662 301662 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301662 301662 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301664 301664 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301664 301664 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301670 301670 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301670 301670 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301674 301674 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301674 301674 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301684 301684 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301684 301684 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301695 301696 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301695 301696 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301700 301702 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301700 301702 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301705 301705 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  301712 301712 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301712 301712 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301716 301716 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301716 301716 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301748 301748 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301748 301748 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301773 301773 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301773 301773 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301777 301777 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301777 301777 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301780 301780 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301780 301780 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301785 301785 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301785 301785 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301803 301803 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301803 301803 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301805 301805 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301805 301805 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301806 301806 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301806 301806 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301816 301816 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301816 301816 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301825 301825 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301825 301825 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301830 301830 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301830 301830 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301834 301834 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301834 301834 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301843 301843 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301843 301843 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301845 301845 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301845 301845 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301855 301856 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301855 301856 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301864 301864 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301864 301864 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301868 301869 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301868 301869 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301883 301883 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301883 301883 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301886 301888 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301886 301888 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301898 301898 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301898 301898 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  301914 301996 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  301914 301996 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  302500 302500 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  302500 302500 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  302556 302556 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  302556 302556 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  302579 302580 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  302579 302580 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  303460 303461 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  303460 303461 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  305907 305939 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  305907 305939 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  305941 305960 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  305941 305960 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  305971 305971 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  305971 305971 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  305974 305974 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  305974 305974 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  305978 305978 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  305978 305978 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  305982 305982 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  305982 305982 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  305984 305988 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  305984 305988 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  305990 305993 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  305990 305993 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306017 306018 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306017 306018 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306020 306020 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306020 306020 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306028 306028 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306028 306028 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306038 306038 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306038 306038 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306150 306151 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306150 306151 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306154 306155 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306154 306155 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306228 306228 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306228 306228 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306229 306229 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306229 306229 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306232 306232 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306232 306232 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306242 306242 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306242 306242 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306245 306245 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306245 306245 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306249 306249 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306249 306249 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306255 306255 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306255 306255 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306259 306263 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306259 306263 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306272 306279 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306272 306279 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306281 306281 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306281 306281 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306289 306289 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306289 306289 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306296 306296 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306296 306296 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306299 306299 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306299 306299 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306300 306300 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306300 306300 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306347 306347 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306347 306347 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306354 306355 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306354 306355 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306357 306357 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306357 306357 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306359 306359 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306359 306359 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306364 306364 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306364 306364 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306394 306394 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306394 306394 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306397 306397 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306397 306397 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306410 306410 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306410 306410 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306412 306412 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306412 306412 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306414 306415 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306414 306415 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306418 306419 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306418 306419 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306422 306422 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306422 306422 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306434 306434 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306434 306434 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306437 306438 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306437 306438 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306442 306444 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306442 306444 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306457 306457 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306457 306457 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306472 306472 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306472 306472 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306479 306479 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306479 306479 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306497 306497 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306497 306497 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306521 306522 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306521 306522 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306537 306539 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306537 306539 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306541 306541 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306541 306541 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306549 306549 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306549 306549 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306562 306565 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306562 306565 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306572 306572 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306572 306572 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306585 306586 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306585 306586 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306592 306593 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306592 306593 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306675 306677 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306675 306677 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306689 306689 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306689 306689 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306695 306696 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306695 306696 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306733 306735 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306733 306735 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306747 306749 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306747 306749 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306753 306753 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306753 306753 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306756 306756 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306756 306756 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306759 306759 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306759 306759 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306762 306762 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306762 306762 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306764 306764 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306764 306764 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306766 306767 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306766 306767 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306769 306769 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306769 306769 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306772 306772 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306772 306772 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306775 306776 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306775 306776 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306779 306779 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306779 306779 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306782 306782 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306782 306782 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306788 306789 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306788 306789 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  306799 306799 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  306799 306799 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  307184 307184 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  307184 307184 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  307188 307190 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  307188 307190 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  307198 307198 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  307198 307198 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  307271 307271 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  307271 307271 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  307274 307274 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  307274 307274 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  307654 307654 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  307654 307654 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  307779 307779 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  307779 307779 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  307788 307789 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  307788 307789 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  307809 307809 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  307809 307809 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308012 308012 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308012 308012 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308016 308016 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308016 308016 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308026 308027 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308026 308027 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308033 308034 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308033 308034 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308037 308037 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308037 308037 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308042 308042 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308042 308042 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308045 308045 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308045 308045 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308048 308049 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308048 308049 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308054 308055 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308054 308055 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308063 308063 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308063 308063 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308076 308077 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308076 308077 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308082 308083 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308082 308083 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308085 308085 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308085 308085 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308087 308089 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308087 308089 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308095 308097 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308095 308097 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308404 308404 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308404 308404 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308412 308412 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308412 308412 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308420 308427 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308420 308427 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308433 308434 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308433 308434 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308441 308446 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308441 308446 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308448 308448 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308448 308448 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308451 308454 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308451 308454 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308457 308459 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308457 308459 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308462 308463 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308462 308463 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308467 308469 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308467 308469 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308472 308473 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308472 308473 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308475 308477 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308475 308477 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308479 308479 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308479 308479 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308482 308482 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308482 308482 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308484 308487 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308484 308487 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308784 308784 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308784 308784 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308804 308804 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308804 308804 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308822 308822 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308822 308822 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  308952 308952 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  308952 308952 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  309001 309633 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  309001 309633 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  309634 309634 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1\n  309635 309746 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  309635 309746 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  309748 309871 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  309748 309871 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  309873 309915 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  309873 309915 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  309917 309999 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\n  309917 309999 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\n  400000 400193 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  400000 400193 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  400196 400514 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  400196 400514 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  400515 400515 MOD11    0    0    0    0    0    0    8    5    7    3    4    9    2    1\n  400516 404799 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  400516 404799 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  406420 406420 MOD10    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  500000 501029 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  502101 560070 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  600000 600108 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  600110 600124 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  600127 600142 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  600144 600149 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  600180 600304 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  600307 600312 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  600314 600355 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  600357 600851 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  600901 601360 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  601403 608028 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  608301 608301 MOD10    0    0    0    0    0    0    7    1    3    7    1    3    7    1\n  608316 608316 MOD10    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  608371 608371 MOD11    0    0    0    0    0    0    2    8    4    3    7    5    6    1\n  609593 609593 MOD10    0    0    0    0    0    0    7    1    3    7    1    3    7    1\n  609599 609599 MOD10    0    0    0    0    0    0    0    5    7    5    2    1    2    1\n  640001 640001 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\n  720000 720249 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\n  720251 724443 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\n  725000 725251 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\n  725253 725616 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\n  726000 726616 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\n  770100 771799 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\n  771877 771877 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\n  771900 772799 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\n  772813 772817 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\n  772901 773999 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\n  774100 774599 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\n  774700 774830 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\n  774832 777789 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\n  777791 777999 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\n  778001 778001 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\n  778300 778799 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\n  778855 778855 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\n  778900 779174 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\n  779414 779999 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\n  800000 802005 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  802007 802042 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  802044 802065 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  802067 802109 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  802111 802114 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  802116 802123 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  802151 802154 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  802156 802179 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  802181 803599 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  803609 819999 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\n  820000 826917 MOD11    0    0    0    0    0    0    0    0    7    3    4    9    2    1\n  820000 826917 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   3\n  826919 827999 MOD11    0    0    0    0    0    0    0    0    7    3    4    9    2    1\n  826919 827999 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   3\n  829000 829999 MOD11    0    0    0    0    0    0    0    0    7    3    4    9    2    1\n  829000 829999 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   3\n  830000 835700 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  836500 836501 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  836505 836506 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  836510 836510 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  836515 836515 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  836530 836530 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  836535 836535 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  836540 836540 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  836560 836560 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  836565 836565 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  836570 836570 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  836585 836585 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  836590 836590 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  836595 836595 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  836620 836620 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  836625 836625 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  836630 836630 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  837550 837550 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  837560 837560 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  837570 837570 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  837580 837580 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\n  839105 839106 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\n  839105 839106 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  839130 839131 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\n  839130 839131 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  839147 839147 MOD10    0    0    0    0    0    0    0    5    7    5    2    1    2    1\n  870000 872791 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\n  870000 872791 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\n  872793 876899 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\n  872793 876899 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\n  876919 876919 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\n  876919 876919 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\n  876921 876923 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\n  876921 876923 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\n  876925 876932 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\n  876925 876932 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\n  876935 876935 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\n  876935 876935 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\n  876951 876951 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\n  876951 876951 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\n  876953 876955 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\n  876953 876955 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\n  876957 876957 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\n  876957 876957 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\n  876961 876965 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\n  876961 876965 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\n  877000 877070 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\n  877000 877070 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\n  877071 877071 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\n  877071 877071 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\n  877078 877078 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\n  877078 877078 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\n  877088 877088 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\n  877088 877088 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\n  877090 877090 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\n  877090 877090 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\n  877098 877098 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\n  877098 877098 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\n  877099 879999 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\n  877099 879999 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\n  890000 890699 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\n  891000 891616 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\n  892000 892616 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\n  900000 902396 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  900000 902396 MOD11   32   16    8    4    2    1    0    0    0    0    0    0    0    0\n  902398 909999 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\n  902398 909999 MOD11   32   16    8    4    2    1    0    0    0    0    0    0    0    0\n  938000 938696 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    0    0   5\n  938000 938696 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    0   5\n  938698 938999 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    0    0   5\n  938698 938999 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    0   5\n  950000 950002 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  950000 950002 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  950004 950479 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  950004 950479 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  950500 959999 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\n  950500 959999 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  980000 980004 MOD11    0    0    0    0    0    0    7    6    5    4    3    2    1    0\n  980000 980004 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  980006 983000 MOD11    0    0    0    0    0    0    7    6    5    4    3    2    1    0\n  980006 983000 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  983003 987000 MOD11    0    0    0    0    0    0    7    6    5    4    3    2    1    0\n  983003 987000 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  987004 989999 MOD11    0    0    0    0    0    0    7    6    5    4    3    2    1    0\n  987004 989999 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\n  ";
-  var scsubtab = "\n  938173 938017\n  938289 938068\n  938297 938076\n  938600 938611\n  938602 938343\n  938604 938603\n  938608 938408\n  938609 938424\n  938613 938017\n  938616 938068\n  938618 938657\n  938620 938343\n  938622 938130\n  938628 938181\n  938643 938246\n  938647 938611\n  938648 938246\n  938649 938394\n  938651 938335\n  938653 938424\n  938654 938621\n  ";
+  var valacdos_v410 = "\x0a  010004 016715 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  050000 050020 MOD11    0    0    0    0    0    0    2    1    7    5    8    2    4    1\x0a  050022 058999 MOD11    0    0    0    0    0    0    2    1    7    5    8    2    4    1\x0a  070116 070116 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1  12\x0a  070116 070116 MOD10    0    3    2    4    5    8    9    4    5    6    7    8    9   -1  13\x0a  070246 070246 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1\x0a  070436 070436 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1\x0a  070806 070806 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1\x0a  070976 070976 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1\x0a  071096 071096 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1\x0a  071226 071226 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1\x0a  071306 071306 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1\x0a  071986 071986 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1\x0a  074456 074456 MOD11    0    0    7    6    5    8    9    4    5    6    7    8    9   -1  12\x0a  074456 074456 MOD10    0    3    2    4    5    8    9    4    5    6    7    8    9   -1  13\x0a  080211 080211 MOD10    0    0    0    0    0    0    7    1    3    7    1    3    7    1\x0a  080228 080228 MOD10    0    0    0    0    0    0    7    1    3    7    1    3    7    1\x0a  086001 086001 MOD10    0    0    0    0    0    0    7    1    3    7    1    3    7    1\x0a  086020 086020 MOD10    0    0    0    0    0    0    7    1    3    7    1    3    7    1\x0a  086086 086086 MOD11    0    0    0    0    0    8    9    4    5    6    7    8    9   -1\x0a  086090 086090 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1   8\x0a  089000 089999 MOD10    0    0    0    0    0    0    7    1    3    7    1    3    7    1\x0a  090013 090013 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\x0a  090105 090105 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\x0a  090118 090118 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\x0a  090126 090129 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\x0a  090131 090136 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\x0a  090150 090156 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\x0a  090180 090185 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\x0a  090190 090196 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\x0a  090204 090204 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\x0a  090222 090222 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\x0a  090356 090356 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\x0a  090500 090599 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\x0a  090704 090704 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\x0a  090705 090705 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\x0a  090710 090710 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\x0a  090715 090715 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\x0a  090720 090726 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\x0a  090736 090739 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\x0a  090790 090790 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\x0a  091600 091600 MOD10    0    0    0    0    0    1    7    1    3    7    1    3    7    1\x0a  091601 091601 MOD10    0    0    3    7    1    3    7    1    3    7    1    3    7    1\x0a  091740 091743 MOD10    0    0    0    0    0    1    7    1    3    7    1    3    7    1\x0a  091800 091809 MOD10    0    0    0    0    0    1    7    1    3    7    1    3    7    1\x0a  091811 091865 MOD10    0    0    0    0    0    1    7    1    3    7    1    3    7    1\x0a  100000 101099 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  101101 101498 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  101500 101999 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  102400 107999 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  108000 108079 MOD11    0    0    0    0    0    3    2    7    6    5    4    3    2    1\x0a  108080 108099 MOD11    0    0    0    0    4    3    2    7    6    5    4    3    2    1\x0a  108100 109999 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  110000 119280 DBLAL    0    0    2    1    2    1    2    1    2    1    2    1    2    1   1\x0a  119282 119283 DBLAL    0    0    2    1    2    1    2    1    2    1    2    1    2    1   1\x0a  119285 119999 DBLAL    0    0    2    1    2    1    2    1    2    1    2    1    2    1   1\x0a  120000 120961 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  120963 122009 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  122011 122101 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  122103 122129 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  122131 122135 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  122213 122299 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  122400 122999 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  124000 124999 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  133000 133999 MOD11    0    0    0    0    0   10    7    8    4    6    3    5    2    1\x0a  134012 134020 MOD11    0    0    0    7    5    9    8    4    6    3    5    2    0    0   4\x0a  134121 134121 MOD11    0    0    0    1    0    0    8    4    6    3    5    2    0    0   4\x0a  150000 158000 MOD11    4    3    0    0    0    0    2    7    6    5    4    3    2    1\x0a  159800 159800 MOD11    0    0    0    0    0    0    7    6    5    4    3    2    1    0\x0a  159900 159900 MOD11    0    0    0    0    0    0    7    6    5    4    3    2    1    0\x0a  159910 159910 MOD11    0    0    0    0    0    0    7    6    5    4    3    2    1    0\x0a  160000 161027 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\x0a  161029 161029 MOD11    0    0    0    0    0    0    2    7    6    5    4    3    2    1\x0a  161030 161041 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\x0a  161050 161050 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\x0a  161055 161055 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\x0a  161060 161060 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\x0a  161065 161065 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\x0a  161070 161070 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\x0a  161075 161075 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\x0a  161080 161080 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\x0a  161085 161085 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\x0a  161090 161090 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\x0a  161100 162028 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\x0a  162030 164300 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\x0a  165901 166001 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\x0a  166050 167600 MOD11    0    0    6    5    4    3    2    7    6    5    4    3    2    1\x0a  168600 168600 MOD11    0    0    0    0    0    0    2    7    6    5    4    3    2    1\x0a  170000 179499 MOD11    0    0    4    2    7    9    2    7    6    5    4    3    2    1\x0a  180002 180002 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\x0a  180005 180005 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\x0a  180009 180009 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\x0a  180036 180036 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\x0a  180038 180038 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\x0a  180091 180092 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\x0a  180104 180104 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\x0a  180109 180110 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\x0a  180156 180156 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\x0a  185001 185001 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1  14\x0a  185003 185025 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  185027 185099 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  200000 200002 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  200000 200002 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  200004 200004 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  200004 200004 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  200051 200077 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  200051 200077 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  200079 200097 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  200079 200097 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  200099 200156 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  200099 200156 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  200158 200387 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  200158 200387 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  200403 200405 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  200403 200405 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  200407 200407 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  200407 200407 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  200411 200412 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  200411 200412 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  200414 200423 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  200414 200423 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  200425 200899 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  200425 200899 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  200901 201159 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  200901 201159 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  201161 201177 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  201161 201177 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  201179 201351 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  201179 201351 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  201353 202698 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  201353 202698 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  202700 203239 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  202700 203239 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  203241 203255 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  203241 203255 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  203259 203519 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  203259 203519 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  203521 204476 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  203521 204476 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  204478 205475 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  204478 205475 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  205477 205954 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  205477 205954 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  205956 206124 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  205956 206124 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  206126 206157 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  206126 206157 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  206159 206390 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  206159 206390 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  206392 206799 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  206392 206799 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  206802 206874 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  206802 206874 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  206876 207170 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  206876 207170 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  207173 208092 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  207173 208092 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  208094 208721 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  208094 208721 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  208723 209034 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  208723 209034 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  209036 209128 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  209036 209128 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  209130 209999 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1   6\x0a  209130 209999 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   6\x0a  230338 230338 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  230338 230338 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  230580 230580 MOD11    0    0    0    0    0    0    2    7    6    5    4    3    2    1  12\x0a  230580 230580 MOD11    0    0    0    0    0    0    5    7    6    5    4    3    2    1  13\x0a  230614 230614 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  230614 230614 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  230709 230709 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  230709 230709 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  230872 230872 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  230872 230872 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  230933 230933 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  230933 230933 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  231018 231018 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  231018 231018 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  231213 231213 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  231213 231213 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  231354 231354 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  231354 231354 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  231469 231469 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  231469 231469 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  231558 231558 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  231558 231558 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  231679 231679 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  231679 231679 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  231843 231843 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  231843 231843 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  231985 231985 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  231985 231985 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  232130 232130 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  232130 232130 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  232279 232279 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  232279 232279 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  232283 232283 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  232283 232283 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  232445 232445 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  232445 232445 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  232571 232571 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  232571 232571 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  232636 232636 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  232636 232636 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  232704 232704 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  232704 232704 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  232725 232725 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  232725 232725 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  232813 232813 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  232813 232813 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  232939 232939 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  232939 232939 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  233080 233080 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  233080 233080 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  233142 233142 MOD10    2    1    2    1    2    1   30   36   24   20   16   12    8    4\x0a  233171 233171 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  233171 233171 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  233188 233188 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  233188 233188 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  233231 233231 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  233231 233231 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  233344 233344 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  233344 233344 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  233438 233438 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  233438 233438 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  233456 233456 MOD10    2    1    2    1    2    1    0   64   32   16    8    4    2    1\x0a  233483 233483 MOD11    0    0    0    0    0    0    2    7    6    5    4    3    2    1\x0a  233556 233556 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  233556 233556 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  233658 233658 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  233658 233658 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  233693 233693 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  233693 233693 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  233752 233752 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  233752 233752 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  234081 234081 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  234081 234081 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  234193 234193 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  234193 234193 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  234252 234252 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  234252 234252 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  234321 234321 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  234321 234321 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  234377 234377 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  234377 234377 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  234570 234570 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  234570 234570 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  234666 234666 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  234666 234666 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  234779 234779 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  234779 234779 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  234828 234828 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  234828 234828 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  234985 234985 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  234985 234985 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  235054 235054 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  235054 235054 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  235164 235164 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  235164 235164 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  235262 235262 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  235262 235262 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  235323 235323 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  235323 235323 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  235451 235451 MOD11    0    0    0    0    0    0    2    7    6    5    4    3    2    1\x0a  235459 235459 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  235459 235459 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  235519 235519 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  235519 235519 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  235676 235676 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  235676 235676 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  235711 235711 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  235711 235711 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  235756 235756 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  235756 235756 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  235945 235945 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  235945 235945 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  236006 236006 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  236006 236006 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  236119 236119 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  236119 236119 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  236233 236233 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  236233 236233 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  236247 236247 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  236293 236293 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  236293 236293 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  236422 236422 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  236422 236422 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  236527 236527 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  236527 236527 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  236538 236538 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  236538 236538 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  236643 236643 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  236643 236643 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  236761 236761 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  236761 236761 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  236907 236907 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  236907 236907 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  237130 237130 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  237130 237130 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  237265 237265 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  237265 237265 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  237355 237355 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  237355 237355 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  237423 237423 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  237423 237423 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  237427 237427 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  237427 237427 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  237563 237563 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  237563 237563 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  237622 237622 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  237622 237622 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  237728 237728 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  237728 237728 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  237873 237873 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  237873 237873 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  238020 238020 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  238020 238020 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  238043 238043 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  238043 238043 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  238051 238051 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  238051 238051 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  238175 238175 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  238175 238175 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  238257 238257 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  238257 238257 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  238392 238431 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\x0a  238392 238431 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  238432 238432 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  238432 238432 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  238433 238583 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\x0a  238433 238583 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  238585 238590 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\x0a  238585 238590 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  238599 238599 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  238599 238599 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  238613 238613 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  238613 238613 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  238672 238672 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  238672 238672 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  238717 238717 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  238717 238717 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  238890 238899 MOD11    0    0    0    0    4    3    2    7    6    5    4    3    2    1\x0a  238908 238908 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  238908 238908 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  239071 239071 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  239071 239071 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  239126 239126 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  239126 239126 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  239136 239140 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\x0a  239136 239140 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  239143 239144 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\x0a  239143 239144 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  239282 239283 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\x0a  239282 239283 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  239285 239294 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\x0a  239285 239294 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  239295 239295 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  239295 239295 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  239296 239318 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\x0a  239296 239318 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  239360 239360 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  239360 239360 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  239380 239380 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  239380 239380 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  239435 239435 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  239435 239435 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  239525 239525 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  239525 239525 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  239642 239642 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  239642 239642 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  239751 239751 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  239751 239751 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  300000 300006 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  300000 300006 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  300008 300009 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  300008 300009 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  300050 300051 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  300134 300138 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  300134 300138 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  300161 300161 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1\x0a  300176 300176 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1\x0a  301001 301001 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301001 301001 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301004 301004 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301004 301004 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301007 301007 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301007 301007 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301012 301012 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301012 301012 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301022 301022 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301027 301027 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301047 301047 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301047 301047 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301049 301049 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301049 301049 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301052 301052 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301052 301052 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301075 301076 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301075 301076 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301108 301108 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301108 301108 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301112 301112 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301112 301112 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301127 301127 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301127 301127 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301137 301137 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301142 301142 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301148 301148 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301148 301148 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301154 301155 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301161 301161 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301161 301161 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301166 301166 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301170 301170 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301174 301175 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301174 301175 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301191 301191 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301191 301191 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301194 301195 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301194 301195 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301204 301205 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301204 301205 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301209 301210 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301209 301210 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301215 301215 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301215 301215 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301218 301218 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301218 301218 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301220 301221 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301220 301221 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301234 301234 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301234 301234 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301251 301251 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301251 301251 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301259 301259 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301259 301259 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301274 301274 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301274 301274 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301280 301280 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301280 301280 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301286 301286 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301286 301286 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301295 301296 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301295 301296 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301299 301299 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301299 301299 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301301 301301 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301301 301301 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301305 301305 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301305 301305 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301318 301318 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301318 301318 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301330 301330 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301330 301330 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301332 301332 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301332 301332 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301335 301335 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301335 301335 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301342 301342 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301342 301342 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301350 301355 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301350 301355 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301364 301364 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301364 301364 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301368 301368 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301368 301368 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301376 301376 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301376 301376 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301380 301380 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301380 301380 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301388 301388 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301388 301388 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301390 301390 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301390 301390 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301395 301395 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301395 301395 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301400 301400 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301400 301400 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301424 301424 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301424 301424 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301432 301432 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301432 301432 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301433 301433 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301435 301435 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301437 301437 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301437 301437 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301439 301439 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301440 301440 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301440 301440 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301443 301443 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301444 301444 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301444 301444 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301447 301447 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301447 301447 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301451 301451 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301451 301451 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301456 301456 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301456 301456 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301458 301458 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301460 301460 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301460 301460 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301463 301463 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301464 301464 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301464 301464 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301466 301466 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301469 301469 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301469 301469 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301471 301471 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301471 301471 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301474 301474 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301477 301477 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301477 301477 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301482 301482 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301483 301483 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301483 301483 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301485 301485 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301487 301487 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301504 301504 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301504 301504 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301510 301510 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301514 301514 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301517 301517 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301525 301525 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301539 301539 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301539 301539 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301542 301542 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301542 301542 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301552 301553 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301552 301553 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301557 301557 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301557 301557 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301573 301573 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301593 301593 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301593 301593 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301595 301595 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301595 301595 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301597 301597 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301597 301597 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301599 301599 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301599 301599 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301607 301607 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301609 301609 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301609 301609 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301611 301611 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301611 301611 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301620 301620 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301620 301620 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301628 301628 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301628 301628 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301634 301634 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301634 301634 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301641 301642 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301641 301642 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301653 301653 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301653 301653 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301657 301657 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301662 301662 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301662 301662 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301664 301664 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301664 301664 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301670 301670 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301670 301670 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301674 301674 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301674 301674 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301684 301684 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301684 301684 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301695 301696 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301695 301696 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301700 301702 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301700 301702 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301705 301705 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  301712 301712 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301712 301712 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301716 301716 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301716 301716 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301748 301748 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301748 301748 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301773 301773 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301773 301773 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301777 301777 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301777 301777 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301780 301780 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301780 301780 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301785 301785 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301785 301785 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301803 301803 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301803 301803 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301805 301805 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301805 301805 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301806 301806 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301806 301806 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301816 301816 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301816 301816 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301825 301825 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301825 301825 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301830 301830 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301830 301830 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301834 301834 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301834 301834 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301843 301843 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301843 301843 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301845 301845 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301845 301845 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301855 301856 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301855 301856 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301864 301864 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301864 301864 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301868 301869 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301868 301869 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301883 301883 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301883 301883 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301886 301888 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301886 301888 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301898 301898 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301898 301898 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  301914 301996 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  301914 301996 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  302500 302500 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  302500 302500 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  302556 302556 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  302556 302556 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  302579 302580 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  302579 302580 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  303460 303461 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  303460 303461 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  305907 305939 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  305907 305939 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  305941 305960 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  305941 305960 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  305971 305971 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  305971 305971 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  305974 305974 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  305974 305974 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  305978 305978 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  305978 305978 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  305982 305982 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  305982 305982 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  305984 305988 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  305984 305988 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  305990 305993 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  305990 305993 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306017 306018 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306017 306018 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306020 306020 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306020 306020 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306028 306028 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306028 306028 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306038 306038 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306038 306038 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306150 306151 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306150 306151 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306154 306155 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306154 306155 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306228 306228 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306228 306228 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306229 306229 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306229 306229 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306232 306232 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306232 306232 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306242 306242 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306242 306242 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306245 306245 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306245 306245 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306249 306249 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306249 306249 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306255 306255 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306255 306255 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306259 306263 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306259 306263 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306272 306279 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306272 306279 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306281 306281 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306281 306281 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306289 306289 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306289 306289 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306296 306296 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306296 306296 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306299 306299 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306299 306299 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306300 306300 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306300 306300 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306347 306347 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306347 306347 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306354 306355 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306354 306355 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306357 306357 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306357 306357 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306359 306359 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306359 306359 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306364 306364 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306364 306364 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306394 306394 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306394 306394 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306397 306397 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306397 306397 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306410 306410 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306410 306410 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306412 306412 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306412 306412 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306414 306415 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306414 306415 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306418 306419 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306418 306419 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306422 306422 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306422 306422 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306434 306434 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306434 306434 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306437 306438 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306437 306438 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306442 306444 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306442 306444 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306457 306457 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306457 306457 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306472 306472 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306472 306472 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306479 306479 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306479 306479 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306497 306497 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306497 306497 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306521 306522 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306521 306522 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306537 306539 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306537 306539 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306541 306541 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306541 306541 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306549 306549 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306549 306549 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306562 306565 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306562 306565 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306572 306572 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306572 306572 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306585 306586 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306585 306586 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306592 306593 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306592 306593 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306675 306677 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306675 306677 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306689 306689 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306689 306689 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306695 306696 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306695 306696 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306733 306735 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306733 306735 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306747 306749 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306747 306749 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306753 306753 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306753 306753 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306756 306756 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306756 306756 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306759 306759 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306759 306759 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306762 306762 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306762 306762 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306764 306764 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306764 306764 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306766 306767 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306766 306767 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306769 306769 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306769 306769 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306772 306772 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306772 306772 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306775 306776 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306775 306776 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306779 306779 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306779 306779 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306782 306782 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306782 306782 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306788 306789 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306788 306789 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  306799 306799 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  306799 306799 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  307184 307184 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  307184 307184 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  307188 307190 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  307188 307190 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  307198 307198 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  307198 307198 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  307271 307271 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  307271 307271 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  307274 307274 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  307274 307274 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  307654 307654 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  307654 307654 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  307779 307779 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  307779 307779 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  307788 307789 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  307788 307789 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  307809 307809 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  307809 307809 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308012 308012 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308012 308012 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308016 308016 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308016 308016 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308026 308027 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308026 308027 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308033 308034 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308033 308034 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308037 308037 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308037 308037 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308042 308042 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308042 308042 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308045 308045 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308045 308045 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308048 308049 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308048 308049 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308054 308055 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308054 308055 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308063 308063 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308063 308063 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308076 308077 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308076 308077 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308082 308083 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308082 308083 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308085 308085 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308085 308085 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308087 308089 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308087 308089 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308095 308097 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308095 308097 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308404 308404 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308404 308404 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308412 308412 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308412 308412 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308420 308427 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308420 308427 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308433 308434 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308433 308434 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308441 308446 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308441 308446 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308448 308448 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308448 308448 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308451 308454 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308451 308454 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308457 308459 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308457 308459 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308462 308463 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308462 308463 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308467 308469 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308467 308469 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308472 308473 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308472 308473 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308475 308477 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308475 308477 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308479 308479 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308479 308479 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308482 308482 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308482 308482 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308484 308487 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308484 308487 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308784 308784 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308784 308784 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308804 308804 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308804 308804 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308822 308822 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308822 308822 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  308952 308952 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  308952 308952 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  309001 309633 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  309001 309633 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  309634 309634 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1\x0a  309635 309746 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  309635 309746 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  309748 309871 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  309748 309871 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  309873 309915 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  309873 309915 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  309917 309999 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2\x0a  309917 309999 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9\x0a  400000 400193 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  400000 400193 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  400196 400514 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  400196 400514 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  400515 400515 MOD11    0    0    0    0    0    0    8    5    7    3    4    9    2    1\x0a  400516 404799 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  400516 404799 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  406420 406420 MOD10    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  500000 501029 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  502101 560070 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  600000 600108 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  600110 600124 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  600127 600142 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  600144 600149 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  600180 600304 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  600307 600312 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  600314 600355 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  600357 600851 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  600901 601360 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  601403 608028 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  608301 608301 MOD10    0    0    0    0    0    0    7    1    3    7    1    3    7    1\x0a  608316 608316 MOD10    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  608370 608370 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  608371 608371 MOD11    0    0    0    0    0    0    2    8    4    3    7    5    6    1\x0a  609593 609593 MOD10    0    0    0    0    0    0    7    1    3    7    1    3    7    1\x0a  609599 609599 MOD10    0    0    0    0    0    0    0    5    7    5    2    1    2    1\x0a  640001 640001 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1\x0a  720000 720249 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\x0a  720251 724443 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\x0a  725000 725251 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\x0a  725253 725616 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\x0a  726000 726616 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\x0a  770100 771799 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\x0a  771877 771877 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\x0a  771900 772799 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\x0a  772813 772817 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\x0a  772901 773999 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\x0a  774100 774599 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\x0a  774700 774830 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\x0a  774832 777789 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\x0a  777791 777999 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\x0a  778001 778001 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\x0a  778300 778799 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\x0a  778855 778855 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\x0a  778900 779174 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\x0a  779414 779999 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1   7\x0a  800000 802005 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  802007 802042 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  802044 802065 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  802067 802109 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  802111 802114 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  802116 802123 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  802151 802154 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  802156 802179 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  802181 803599 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  803609 819999 MOD11    0    0    1    8    2    6    3    7    9    5    8    4    2    1\x0a  820000 826917 MOD11    0    0    0    0    0    0    0    0    7    3    4    9    2    1\x0a  820000 826917 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   3\x0a  826919 827999 MOD11    0    0    0    0    0    0    0    0    7    3    4    9    2    1\x0a  826919 827999 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   3\x0a  829000 829999 MOD11    0    0    0    0    0    0    0    0    7    3    4    9    2    1\x0a  829000 829999 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1   3\x0a  830000 835700 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  836500 836501 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  836505 836506 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  836510 836510 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  836515 836515 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  836530 836530 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  836535 836535 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  836540 836540 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  836560 836560 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  836565 836565 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  836570 836570 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  836585 836585 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  836590 836590 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  836595 836595 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  836620 836620 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  836625 836625 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  836630 836630 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  837550 837550 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  837560 837560 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  837570 837570 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  837580 837580 MOD11    0    0    4    3    2    7    2    7    6    5    4    3    2    1\x0a  839105 839106 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\x0a  839105 839106 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  839130 839131 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    1    0\x0a  839130 839131 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  839147 839147 MOD10    0    0    0    0    0    0    0    5    7    5    2    1    2    1\x0a  870000 872791 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\x0a  870000 872791 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\x0a  872793 876899 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\x0a  872793 876899 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\x0a  876919 876919 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\x0a  876919 876919 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\x0a  876921 876923 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\x0a  876921 876923 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\x0a  876925 876932 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\x0a  876925 876932 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\x0a  876935 876935 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\x0a  876935 876935 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\x0a  876951 876951 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\x0a  876951 876951 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\x0a  876953 876955 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\x0a  876953 876955 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\x0a  876957 876957 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\x0a  876957 876957 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\x0a  876961 876965 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\x0a  876961 876965 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\x0a  877000 877070 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\x0a  877000 877070 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\x0a  877071 877071 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\x0a  877071 877071 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\x0a  877078 877078 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\x0a  877078 877078 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\x0a  877088 877088 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\x0a  877088 877088 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\x0a  877090 877090 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\x0a  877090 877090 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\x0a  877098 877098 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\x0a  877098 877098 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\x0a  877099 879999 MOD11    0    0    1    2    5    3    6    4    8    7   10    9    3    1  10\x0a  877099 879999 MOD11    0    0    5   10    9    8    0    7    6    5    4    3    2    1  11\x0a  890000 890699 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\x0a  891000 891616 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\x0a  892000 892616 MOD11    0    0    0    0    0    9    8    7    6    5    4    3    2    1\x0a  900000 902396 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  900000 902396 MOD11   32   16    8    4    2    1    0    0    0    0    0    0    0    0\x0a  902398 909999 MOD11    0    0    0    0    0    0  128   64   32   16    8    4    2    1\x0a  902398 909999 MOD11   32   16    8    4    2    1    0    0    0    0    0    0    0    0\x0a  938000 938696 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    0    0   5\x0a  938000 938696 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    0   5\x0a  938698 938999 MOD11    7    6    5    4    3    2    7    6    5    4    3    2    0    0   5\x0a  938698 938999 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    0   5\x0a  950000 950002 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  950000 950002 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  950004 950479 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  950004 950479 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  950500 959999 MOD11    0    0    0    0    0    0    0    7    6    5    4    3    2    1\x0a  950500 959999 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  980000 980004 MOD11    0    0    0    0    0    0    7    6    5    4    3    2    1    0\x0a  980000 980004 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  980006 983000 MOD11    0    0    0    0    0    0    7    6    5    4    3    2    1    0\x0a  980006 983000 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  983003 987000 MOD11    0    0    0    0    0    0    7    6    5    4    3    2    1    0\x0a  983003 987000 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  987004 989999 MOD11    0    0    0    0    0    0    7    6    5    4    3    2    1    0\x0a  987004 989999 DBLAL    2    1    2    1    2    1    2    1    2    1    2    1    2    1\x0a  ";
+  var scsubtab = "\x0a  938173 938017\x0a  938289 938068\x0a  938297 938076\x0a  938600 938611\x0a  938602 938343\x0a  938604 938603\x0a  938608 938408\x0a  938609 938424\x0a  938613 938017\x0a  938616 938068\x0a  938618 938657\x0a  938620 938343\x0a  938622 938130\x0a  938628 938181\x0a  938643 938246\x0a  938647 938611\x0a  938648 938246\x0a  938649 938394\x0a  938651 938335\x0a  938653 938424\x0a  938654 938621\x0a  ";
   exports["scsubtab"] = scsubtab;
-  exports["valacdos_v400"] = valacdos_v400;
+  exports["valacdos_v410"] = valacdos_v410;
 })(PS["ModulusCheck.Resources"] = PS["ModulusCheck.Resources"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Data_Either = PS["Data.Either"];
@@ -9477,7 +9896,7 @@ var PS = {};
           return Control_Applicative.pure(Data_Either.applicativeEither)(Data_Map.lookup(Data_Ord.ordString)(sortCode)($6));
       });
   };
-  var checkRowsTable = ModulusCheck_Parsers.parse(ModulusCheck_Resources.valacdos_v400)(ModulusCheck_Data_CheckRow_Parser.checkRowTableParser);
+  var checkRowsTable = ModulusCheck_Parsers.parse(ModulusCheck_Resources.valacdos_v410)(ModulusCheck_Data_CheckRow_Parser.checkRowTableParser);
   var getCheckRows = function (sortCodeString) {
       var relevantRow = function (v) {
           return v.from <= sortCodeString && v.to >= sortCodeString;
@@ -9490,7 +9909,7 @@ var PS = {};
   exports["getSortCodeSubstitution"] = getSortCodeSubstitution;
 })(PS["ModulusCheck.Data.Tables"] = PS["ModulusCheck.Data.Tables"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Data_Either = PS["Data.Either"];
@@ -9567,8 +9986,8 @@ var PS = {};
       };
   };
   var doubleAlternateCheck = function (w) {
-      return function ($77) {
-          return modCheck(10)(0)(doubleAlternateSum(w)($77));
+      return function ($78) {
+          return modCheck(10)(0)(doubleAlternateSum(w)($78));
       };
   };
   var exception1Check = function (checkRow) {
@@ -9610,7 +10029,7 @@ var PS = {};
                       if (v1 === 1) {
                           return false;
                       };
-                      return modCheck(11)(11 - v1)(v);
+                      return modCheck(11)(11 - v1 | 0)(v);
                   };
               };
               var performDblAlCheck = function (sum) {
@@ -9618,20 +10037,20 @@ var PS = {};
                       if (v === 0) {
                           return modCheck(10)(0)(sum);
                       };
-                      return modCheck(10)(10 - v)(sum);
+                      return modCheck(10)(10 - v | 0)(sum);
                   };
               };
               var secondCheck = function (w) {
                   return function (d) {
-                      return Control_Bind.bind(Data_Either.bindEither)(ModulusCheck_Data_AccountNumber.getDigit("h")(d))(function ($78) {
-                          return Control_Applicative.pure(Data_Either.applicativeEither)(performDblAlCheck(doubleAlternateSum(w)(d))($78));
+                      return Control_Bind.bind(Data_Either.bindEither)(ModulusCheck_Data_AccountNumber.getDigit("h")(d))(function ($79) {
+                          return Control_Applicative.pure(Data_Either.applicativeEither)(performDblAlCheck(doubleAlternateSum(w)(d))($79));
                       });
                   };
               };
               var firstCheck = function (w) {
                   return function (d) {
-                      return Control_Bind.bind(Data_Either.bindEither)(ModulusCheck_Data_AccountNumber.getDigit("g")(d))(function ($79) {
-                          return Control_Applicative.pure(Data_Either.applicativeEither)(performMod11Check(standardModSum(w)(d))($79));
+                      return Control_Bind.bind(Data_Either.bindEither)(ModulusCheck_Data_AccountNumber.getDigit("g")(d))(function ($80) {
+                          return Control_Applicative.pure(Data_Either.applicativeEither)(performMod11Check(standardModSum(w)(d))($80));
                       });
                   };
               };
@@ -9646,13 +10065,13 @@ var PS = {};
       };
   };
   var mod10Check = function (w) {
-      return function ($80) {
-          return modCheck(10)(0)(standardModSum(w)($80));
+      return function ($81) {
+          return modCheck(10)(0)(standardModSum(w)($81));
       };
   };
   var mod11Check = function (w) {
-      return function ($81) {
-          return modCheck(11)(0)(standardModSum(w)($81));
+      return function ($82) {
+          return modCheck(11)(0)(standardModSum(w)($82));
       };
   };
   var exception2Check = function (weights) {
@@ -9677,8 +10096,8 @@ var PS = {};
   var exception9Check = function (weights) {
       return function (accountNumber) {
           var sortCodeReplacement = new Data_List_Types.Cons(3, new Data_List_Types.Cons(0, new Data_List_Types.Cons(9, new Data_List_Types.Cons(6, new Data_List_Types.Cons(3, new Data_List_Types.Cons(4, Data_List_Types.Nil.value))))));
-          return Control_Bind.bind(Data_Either.bindEither)(ModulusCheck_Data_AccountNumber.replacePrefix(sortCodeReplacement)(accountNumber.digits))(function ($82) {
-              return Control_Applicative.pure(Data_Either.applicativeEither)(mod11Check(weights)($82));
+          return Control_Bind.bind(Data_Either.bindEither)(ModulusCheck_Data_AccountNumber.replacePrefix(sortCodeReplacement)(accountNumber.digits))(function ($83) {
+              return Control_Applicative.pure(Data_Either.applicativeEither)(mod11Check(weights)($83));
           });
       };
   };
@@ -9718,8 +10137,8 @@ var PS = {};
       };
   };
   var exception11Check = function (row) {
-      return function ($83) {
-          return Control_Applicative.pure(Data_Either.applicativeEither)(performStandardCheck(row)($83));
+      return function ($84) {
+          return Control_Applicative.pure(Data_Either.applicativeEither)(performStandardCheck(row)($84));
       };
   };
   var exception3Check = function (standardCheckRow) {
@@ -9785,8 +10204,8 @@ var PS = {};
               };
               return performStandardCheck(row)(accountNumber);
           };
-          return Control_Bind.bind(Data_Either.bindEither)(ModulusCheck_Data_AccountNumber.getDigit("g")(accountNumber.digits))(function ($84) {
-              return Control_Applicative.pure(Data_Either.applicativeEither)(performCheck($84));
+          return Control_Bind.bind(Data_Either.bindEither)(ModulusCheck_Data_AccountNumber.getDigit("g")(accountNumber.digits))(function ($85) {
+              return Control_Applicative.pure(Data_Either.applicativeEither)(performCheck($85));
           });
       };
   };
@@ -9796,19 +10215,19 @@ var PS = {};
           var replaceSortCode = function (x) {
               return Control_Bind.bind(Data_Either.bindEither)(ModulusCheck_Data_AccountNumber.replacePrefix(replacement)(x.digits))(function (newDigits) {
                   return Control_Applicative.pure(Data_Either.applicativeEither)((function () {
-                      var $69 = {};
-                      for (var $70 in x) {
-                          if (x.hasOwnProperty($70)) {
-                              $69[$70] = x[$70];
+                      var $70 = {};
+                      for (var $71 in x) {
+                          if ({}.hasOwnProperty.call(x, $71)) {
+                              $70[$71] = x[$71];
                           };
                       };
-                      $69.digits = newDigits;
-                      return $69;
+                      $70.digits = newDigits;
+                      return $70;
                   })());
               });
           };
-          return Control_Bind.bind(Data_Either.bindEither)(replaceSortCode(accountNumber))(function ($85) {
-              return Control_Applicative.pure(Data_Either.applicativeEither)(performStandardCheck(row)($85));
+          return Control_Bind.bind(Data_Either.bindEither)(replaceSortCode(accountNumber))(function ($86) {
+              return Control_Applicative.pure(Data_Either.applicativeEither)(performStandardCheck(row)($86));
           });
       };
   };
@@ -9842,8 +10261,8 @@ var PS = {};
               throw new Error("Failed pattern match at ModulusCheck.Checks line 186, column 5 - line 188, column 48: " + [ h.constructor.name ]);
           };
           var performExceptionCheck = function (v) {
-              return Control_Bind.bind(Data_Either.bindEither)(ModulusCheck_Data_AccountNumber.getDigit("h")(accountNumber.digits))(function ($86) {
-                  return Control_Applicative.pure(Data_Either.applicativeEither)(checkWithH($86));
+              return Control_Bind.bind(Data_Either.bindEither)(ModulusCheck_Data_AccountNumber.getDigit("h")(accountNumber.digits))(function ($87) {
+                  return Control_Applicative.pure(Data_Either.applicativeEither)(checkWithH($87));
               });
           };
           return anyEither(Control_Applicative.pure(Data_Either.applicativeEither)(mod11Check(row.weights)(accountNumber.digits)))(Data_Lazy.defer(performExceptionCheck));
@@ -9882,7 +10301,7 @@ var PS = {};
   exports["performStandardCheck"] = performStandardCheck;
 })(PS["ModulusCheck.Checks"] = PS["ModulusCheck.Checks"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Data_Either = PS["Data.Either"];
@@ -9976,7 +10395,7 @@ var PS = {};
   exports["standardAccountNumberParser"] = standardAccountNumberParser;
 })(PS["ModulusCheck.Data.AccountNumber.Parser"] = PS["ModulusCheck.Data.AccountNumber.Parser"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Data_Either = PS["Data.Either"];
@@ -10081,34 +10500,35 @@ var PS = {};
   exports["check"] = check;
 })(PS["ModulusCheck"] = PS["ModulusCheck"] || {});
 (function(exports) {
-  // Generated by psc version 0.10.3
+  // Generated by psc version 0.10.7
   "use strict";
   var Prelude = PS["Prelude"];
   var Control_Monad_Eff = PS["Control.Monad.Eff"];
   var Data_Array = PS["Data.Array"];
   var Data_Either = PS["Data.Either"];
   var Data_Maybe = PS["Data.Maybe"];
+  var Data_Void = PS["Data.Void"];
   var Halogen = PS["Halogen"];
-  var Halogen_HTML_Events_Indexed = PS["Halogen.HTML.Events.Indexed"];
-  var Halogen_HTML_Indexed = PS["Halogen.HTML.Indexed"];
-  var Halogen_HTML_Properties_Indexed = PS["Halogen.HTML.Properties.Indexed"];
-  var Halogen_Util = PS["Halogen.Util"];
+  var Halogen_Aff = PS["Halogen.Aff"];
+  var Halogen_HTML_Events = PS["Halogen.HTML.Events"];
+  var Halogen_HTML = PS["Halogen.HTML"];
+  var Halogen_HTML_Properties = PS["Halogen.HTML.Properties"];
+  var Halogen_VDom_Driver = PS["Halogen.VDom.Driver"];
   var ModulusCheck = PS["ModulusCheck"];
   var Data_Function = PS["Data.Function"];
   var Data_Semigroup = PS["Data.Semigroup"];
   var Halogen_HTML_Core = PS["Halogen.HTML.Core"];
   var Halogen_HTML_Elements = PS["Halogen.HTML.Elements"];
-  var Halogen_HTML_Elements_Indexed = PS["Halogen.HTML.Elements.Indexed"];
-  var Halogen_HTML_Events = PS["Halogen.HTML.Events"];
-  var Halogen_HTML = PS["Halogen.HTML"];
+  var DOM_HTML_Indexed_InputType = PS["DOM.HTML.Indexed.InputType"];
   var Data_Functor = PS["Data.Functor"];
   var Control_Bind = PS["Control.Bind"];
-  var Control_Monad_Free = PS["Control.Monad.Free"];
-  var Halogen_Query = PS["Halogen.Query"];
+  var Halogen_Query_HalogenM = PS["Halogen.Query.HalogenM"];
+  var Control_Monad_State_Class = PS["Control.Monad.State.Class"];
   var Control_Applicative = PS["Control.Applicative"];
   var Halogen_Component = PS["Halogen.Component"];
+  var Halogen_Aff_Util = PS["Halogen.Aff.Util"];
   var Control_Monad_Aff = PS["Control.Monad.Aff"];
-  var Halogen_Driver = PS["Halogen.Driver"];        
+  var Data_Unit = PS["Data.Unit"];        
   var SetValidateOnChange = (function () {
       function SetValidateOnChange(value0, value1) {
           this.value0 = value0;
@@ -10184,11 +10604,6 @@ var PS = {};
           checkResult: v
       };
   };
-  var initialState = {
-      validateOnChange: false, 
-      currentRow: emptyRow(Data_Maybe.Nothing.value), 
-      previousRows: [  ]
-  };
   var checkAccountNumber = function (sortCode) {
       return function (accountNumber) {
           var toCheckResult = function (v) {
@@ -10201,7 +10616,7 @@ var PS = {};
               if (v instanceof Data_Either.Left) {
                   return new $$Error(v.value0);
               };
-              throw new Error("Failed pattern match at Main line 51, column 5 - line 51, column 40: " + [ v.constructor.name ]);
+              throw new Error("Failed pattern match at Main line 50, column 5 - line 50, column 40: " + [ v.constructor.name ]);
           };
           return toCheckResult(ModulusCheck.check(sortCode)(accountNumber));
       };
@@ -10217,38 +10632,38 @@ var PS = {};
           if (v instanceof $$Error) {
               return "error: " + v.value0;
           };
-          throw new Error("Failed pattern match at Main line 75, column 3 - line 76, column 3: " + [ v.constructor.name ]);
+          throw new Error("Failed pattern match at Main line 84, column 3 - line 85, column 3: " + [ v.constructor.name ]);
       };
       var resultClassName = function (v) {
           if (v instanceof Valid) {
-              return Halogen_HTML_Core.className("valid");
+              return "valid";
           };
           if (v instanceof Invalid) {
-              return Halogen_HTML_Core.className("invalid");
+              return "invalid";
           };
           if (v instanceof $$Error) {
-              return Halogen_HTML_Core.className("error");
+              return "error";
           };
-          throw new Error("Failed pattern match at Main line 80, column 3 - line 81, column 3: " + [ v.constructor.name ]);
+          throw new Error("Failed pattern match at Main line 89, column 3 - line 90, column 3: " + [ v.constructor.name ]);
       };
       var renderValidateOnChangeToggle = function (value) {
-          return Halogen_HTML_Elements.div_([ Halogen_HTML_Elements_Indexed.input([ Halogen_HTML_Properties_Indexed.inputType(Halogen_HTML_Properties_Indexed.InputCheckbox.value), Halogen_HTML_Properties_Indexed.title("Validate on keypress"), Halogen_HTML_Properties_Indexed.id_("validateOnChange"), Halogen_HTML_Properties_Indexed.checked(value), Halogen_HTML_Events_Indexed.onChecked(Halogen_HTML_Events.input(SetValidateOnChange.create)) ]), Halogen_HTML_Elements_Indexed.label([ Halogen_HTML_Properties_Indexed["for"]("validateOnChange") ])([ Halogen_HTML.text("Validate on keypress") ]) ]);
+          return Halogen_HTML_Elements.div_([ Halogen_HTML_Elements.input([ Halogen_HTML_Properties.type_(Halogen_HTML_Core.inputTypeIsProp)(DOM_HTML_Indexed_InputType.InputCheckbox.value), Halogen_HTML_Properties.title("Validate on keypress"), Halogen_HTML_Properties.id_("validateOnChange"), Halogen_HTML_Properties.checked(value), Halogen_HTML_Events.onChecked(Halogen_HTML_Events.input(SetValidateOnChange.create)) ]), Halogen_HTML_Elements.label([ Halogen_HTML_Properties["for"]("validateOnChange") ])([ Halogen_HTML_Core.text("Validate on keypress") ]) ]);
       };
       var renderPreviousRow = function (row) {
-          return Halogen_HTML_Elements.tr_([ Halogen_HTML_Elements.td_([ Halogen_HTML.text(row.sortCode) ]), Halogen_HTML_Elements.td_([ Halogen_HTML.text(row.accountNumber) ]), Halogen_HTML_Elements_Indexed.td([ Halogen_HTML_Properties_Indexed.class_(resultClassName(row.checkResult)) ])([ Halogen_HTML.text(resultString(row.checkResult)) ]) ]);
+          return Halogen_HTML_Elements.tr_([ Halogen_HTML_Elements.td_([ Halogen_HTML_Core.text(row.sortCode) ]), Halogen_HTML_Elements.td_([ Halogen_HTML_Core.text(row.accountNumber) ]), Halogen_HTML_Elements.td([ Halogen_HTML_Properties.class_(resultClassName(row.checkResult)) ])([ Halogen_HTML_Core.text(resultString(row.checkResult)) ]) ]);
       };
       var renderPreviousRowsTable = function (rows) {
-          return Halogen_HTML_Elements.table_([ Halogen_HTML_Elements.thead_([ Halogen_HTML_Elements.tr_([ Halogen_HTML_Elements.th_([ Halogen_HTML.text("sort code") ]), Halogen_HTML_Elements.th_([ Halogen_HTML.text("account number") ]), Halogen_HTML_Elements.th_([ Halogen_HTML.text("result") ]) ]) ]), Halogen_HTML_Elements.tbody_(Data_Functor.map(Data_Functor.functorArray)(renderPreviousRow)(rows)) ]);
+          return Halogen_HTML_Elements.table_([ Halogen_HTML_Elements.thead_([ Halogen_HTML_Elements.tr_([ Halogen_HTML_Elements.th_([ Halogen_HTML_Core.text("sort code") ]), Halogen_HTML_Elements.th_([ Halogen_HTML_Core.text("account number") ]), Halogen_HTML_Elements.th_([ Halogen_HTML_Core.text("result") ]) ]) ]), Halogen_HTML_Elements.tbody_(Data_Functor.map(Data_Functor.functorArray)(renderPreviousRow)(rows)) ]);
       };
       var renderCurrentRow = function (row) {
           var resultClass = function (v) {
               if (v instanceof Data_Maybe.Nothing) {
-                  return Halogen_HTML_Core.className("nothing");
+                  return "nothing";
               };
               if (v instanceof Data_Maybe.Just) {
                   return resultClassName(v.value0);
               };
-              throw new Error("Failed pattern match at Main line 135, column 7 - line 136, column 7: " + [ v.constructor.name ]);
+              throw new Error("Failed pattern match at Main line 144, column 7 - line 145, column 7: " + [ v.constructor.name ]);
           };
           var result = function (v) {
               if (v instanceof Data_Maybe.Nothing) {
@@ -10257,33 +10672,38 @@ var PS = {};
               if (v instanceof Data_Maybe.Just) {
                   return resultString(v.value0);
               };
-              throw new Error("Failed pattern match at Main line 139, column 7 - line 140, column 7: " + [ v.constructor.name ]);
+              throw new Error("Failed pattern match at Main line 148, column 7 - line 149, column 7: " + [ v.constructor.name ]);
           };
-          return Halogen_HTML_Elements.div_([ Halogen_HTML_Elements_Indexed.input([ Halogen_HTML_Properties_Indexed.inputType(Halogen_HTML_Properties_Indexed.InputText.value), Halogen_HTML_Properties_Indexed.placeholder("sort code"), Halogen_HTML_Properties_Indexed.value(row.sortCode), Halogen_HTML_Events_Indexed.onValueInput(Halogen_HTML_Events.input(SetSortCode.create)) ]), Halogen_HTML_Elements_Indexed.input([ Halogen_HTML_Properties_Indexed.inputType(Halogen_HTML_Properties_Indexed.InputText.value), Halogen_HTML_Properties_Indexed.placeholder("account number"), Halogen_HTML_Properties_Indexed.value(row.accountNumber), Halogen_HTML_Events_Indexed.onValueInput(Halogen_HTML_Events.input(SetAccountNumber.create)) ]), Halogen_HTML_Elements_Indexed.button([ Halogen_HTML_Properties_Indexed.title("Check"), Halogen_HTML_Events_Indexed.onClick(Halogen_HTML_Events.input_(PerformCheck.create)) ])([ Halogen_HTML.text("Check") ]), Halogen_HTML_Elements_Indexed.span([ Halogen_HTML_Properties_Indexed.id_("validation-inline"), Halogen_HTML_Properties_Indexed.class_(resultClass(row.checkResult)) ])([ Halogen_HTML.text(result(row.checkResult)) ]) ]);
+          return Halogen_HTML_Elements.div_([ Halogen_HTML_Elements.input([ Halogen_HTML_Properties.type_(Halogen_HTML_Core.inputTypeIsProp)(DOM_HTML_Indexed_InputType.InputText.value), Halogen_HTML_Properties.placeholder("sort code"), Halogen_HTML_Properties.value(row.sortCode), Halogen_HTML_Events.onValueInput(Halogen_HTML_Events.input(SetSortCode.create)) ]), Halogen_HTML_Elements.input([ Halogen_HTML_Properties.type_(Halogen_HTML_Core.inputTypeIsProp)(DOM_HTML_Indexed_InputType.InputText.value), Halogen_HTML_Properties.placeholder("account number"), Halogen_HTML_Properties.value(row.accountNumber), Halogen_HTML_Events.onValueInput(Halogen_HTML_Events.input(SetAccountNumber.create)) ]), Halogen_HTML_Elements.button([ Halogen_HTML_Properties.title("Check"), Halogen_HTML_Events.onClick(Halogen_HTML_Events.input_(PerformCheck.create)) ])([ Halogen_HTML_Core.text("Check") ]), Halogen_HTML_Elements.span([ Halogen_HTML_Properties.id_("validation-inline"), Halogen_HTML_Properties.class_(resultClass(row.checkResult)) ])([ Halogen_HTML_Core.text(result(row.checkResult)) ]) ]);
       };
       var render = function (state) {
           return Halogen_HTML_Elements.div_([ renderValidateOnChangeToggle(state.validateOnChange), renderCurrentRow(state.currentRow), renderPreviousRowsTable(state.previousRows) ]);
       };
+      var initialState = {
+          validateOnChange: false, 
+          currentRow: emptyRow(Data_Maybe.Nothing.value), 
+          previousRows: [  ]
+      };
       var checkRow = function (row) {
-          var $21 = {};
-          for (var $22 in row) {
-              if (row.hasOwnProperty($22)) {
-                  $21[$22] = row[$22];
+          var $29 = {};
+          for (var $30 in row) {
+              if ({}.hasOwnProperty.call(row, $30)) {
+                  $29[$30] = row[$30];
               };
           };
-          $21.checkResult = checkAccountNumber(row.sortCode)(row.accountNumber);
-          return $21;
+          $29.checkResult = checkAccountNumber(row.sortCode)(row.accountNumber);
+          return $29;
       };
       var checkCurrentRow = function (row) {
           var checked = checkRow(row);
-          var $24 = {};
-          for (var $25 in checked) {
-              if (checked.hasOwnProperty($25)) {
-                  $24[$25] = checked[$25];
+          var $32 = {};
+          for (var $33 in checked) {
+              if ({}.hasOwnProperty.call(checked, $33)) {
+                  $32[$33] = checked[$33];
               };
           };
-          $24.checkResult = new Data_Maybe.Just(checked.checkResult);
-          return $24;
+          $32.checkResult = new Data_Maybe.Just(checked.checkResult);
+          return $32;
       };
       var performOptionalCurrentRowCheck = function (v) {
           return function (row) {
@@ -10291,103 +10711,105 @@ var PS = {};
                   return checkCurrentRow(row);
               };
               if (!v) {
-                  var $29 = {};
-                  for (var $30 in row) {
-                      if (row.hasOwnProperty($30)) {
-                          $29[$30] = row[$30];
+                  var $37 = {};
+                  for (var $38 in row) {
+                      if ({}.hasOwnProperty.call(row, $38)) {
+                          $37[$38] = row[$38];
                       };
                   };
-                  $29.checkResult = Data_Maybe.Nothing.value;
-                  return $29;
+                  $37.checkResult = Data_Maybe.Nothing.value;
+                  return $37;
               };
-              throw new Error("Failed pattern match at Main line 159, column 3 - line 159, column 65: " + [ v.constructor.name, row.constructor.name ]);
+              throw new Error("Failed pattern match at Main line 168, column 3 - line 168, column 65: " + [ v.constructor.name, row.constructor.name ]);
           };
       };
       var updateCurrentRow = function (currentRow) {
           return function (state) {
-              var $32 = {};
-              for (var $33 in state) {
-                  if (state.hasOwnProperty($33)) {
-                      $32[$33] = state[$33];
+              var $40 = {};
+              for (var $41 in state) {
+                  if ({}.hasOwnProperty.call(state, $41)) {
+                      $40[$41] = state[$41];
                   };
               };
-              $32.currentRow = performOptionalCurrentRowCheck(state.validateOnChange)(currentRow);
-              return $32;
+              $40.currentRow = performOptionalCurrentRowCheck(state.validateOnChange)(currentRow);
+              return $40;
           };
       };
       var $$eval = function (v) {
           if (v instanceof SetValidateOnChange) {
-              return Control_Bind.bind(Control_Monad_Free.freeBind)(Halogen_Query.modify(function (state) {
+              return Control_Bind.bind(Halogen_Query_HalogenM.bindHalogenM)(Control_Monad_State_Class.modify(Halogen_Query_HalogenM.monadStateHalogenM)(function (state) {
                   return updateCurrentRow(state.currentRow)((function () {
-                      var $36 = {};
-                      for (var $37 in state) {
-                          if (state.hasOwnProperty($37)) {
-                              $36[$37] = state[$37];
+                      var $44 = {};
+                      for (var $45 in state) {
+                          if ({}.hasOwnProperty.call(state, $45)) {
+                              $44[$45] = state[$45];
                           };
                       };
-                      $36.validateOnChange = v.value0;
-                      return $36;
+                      $44.validateOnChange = v.value0;
+                      return $44;
                   })());
               }))(function () {
-                  return Control_Applicative.pure(Control_Monad_Free.freeApplicative)(v.value1);
+                  return Control_Applicative.pure(Halogen_Query_HalogenM.applicativeHalogenM)(v.value1);
               });
           };
           if (v instanceof SetSortCode) {
-              return Control_Bind.bind(Control_Monad_Free.freeBind)(Halogen_Query.modify(function (state) {
+              return Control_Bind.bind(Halogen_Query_HalogenM.bindHalogenM)(Control_Monad_State_Class.modify(Halogen_Query_HalogenM.monadStateHalogenM)(function (state) {
                   return updateCurrentRow((function () {
-                      var $41 = {};
-                      for (var $42 in state.currentRow) {
-                          if (state.currentRow.hasOwnProperty($42)) {
-                              $41[$42] = state.currentRow[$42];
+                      var $49 = {};
+                      for (var $50 in state.currentRow) {
+                          if ({}.hasOwnProperty.call(state.currentRow, $50)) {
+                              $49[$50] = state["currentRow"][$50];
                           };
                       };
-                      $41.sortCode = v.value0;
-                      return $41;
+                      $49.sortCode = v.value0;
+                      return $49;
                   })())(state);
               }))(function () {
-                  return Control_Applicative.pure(Control_Monad_Free.freeApplicative)(v.value1);
+                  return Control_Applicative.pure(Halogen_Query_HalogenM.applicativeHalogenM)(v.value1);
               });
           };
           if (v instanceof SetAccountNumber) {
-              return Control_Bind.bind(Control_Monad_Free.freeBind)(Halogen_Query.modify(function (state) {
+              return Control_Bind.bind(Halogen_Query_HalogenM.bindHalogenM)(Control_Monad_State_Class.modify(Halogen_Query_HalogenM.monadStateHalogenM)(function (state) {
                   return updateCurrentRow((function () {
-                      var $46 = {};
-                      for (var $47 in state.currentRow) {
-                          if (state.currentRow.hasOwnProperty($47)) {
-                              $46[$47] = state.currentRow[$47];
+                      var $54 = {};
+                      for (var $55 in state.currentRow) {
+                          if ({}.hasOwnProperty.call(state.currentRow, $55)) {
+                              $54[$55] = state["currentRow"][$55];
                           };
                       };
-                      $46.accountNumber = v.value0;
-                      return $46;
+                      $54.accountNumber = v.value0;
+                      return $54;
                   })())(state);
               }))(function () {
-                  return Control_Applicative.pure(Control_Monad_Free.freeApplicative)(v.value1);
+                  return Control_Applicative.pure(Halogen_Query_HalogenM.applicativeHalogenM)(v.value1);
               });
           };
           if (v instanceof PerformCheck) {
-              return Control_Bind.bind(Control_Monad_Free.freeBind)(Halogen_Query.modify(function (state) {
-                  var $51 = {};
-                  for (var $52 in state) {
-                      if (state.hasOwnProperty($52)) {
-                          $51[$52] = state[$52];
+              return Control_Bind.bind(Halogen_Query_HalogenM.bindHalogenM)(Control_Monad_State_Class.modify(Halogen_Query_HalogenM.monadStateHalogenM)(function (state) {
+                  var $59 = {};
+                  for (var $60 in state) {
+                      if ({}.hasOwnProperty.call(state, $60)) {
+                          $59[$60] = state[$60];
                       };
                   };
-                  $51.currentRow = emptyRow(Data_Maybe.Nothing.value);
-                  $51.previousRows = Data_Array.snoc(state.previousRows)(checkRow(state.currentRow));
-                  return $51;
+                  $59.currentRow = emptyRow(Data_Maybe.Nothing.value);
+                  $59.previousRows = Data_Array.snoc(state.previousRows)(checkRow(state.currentRow));
+                  return $59;
               }))(function () {
-                  return Control_Applicative.pure(Control_Monad_Free.freeApplicative)(v.value0);
+                  return Control_Applicative.pure(Halogen_Query_HalogenM.applicativeHalogenM)(v.value0);
               });
           };
-          throw new Error("Failed pattern match at Main line 167, column 3 - line 169, column 14: " + [ v.constructor.name ]);
+          throw new Error("Failed pattern match at Main line 176, column 3 - line 178, column 14: " + [ v.constructor.name ]);
       };
-      return Halogen_Component.component({
+      return Halogen_Component.component(Halogen_HTML_Core.bifunctorHTML)({
+          initialState: Data_Function["const"](initialState), 
           render: render, 
-          "eval": $$eval
+          "eval": $$eval, 
+          receiver: Data_Function["const"](Data_Maybe.Nothing.value)
       });
   })();
-  var main = Halogen_Util.runHalogenAff(Control_Bind.bind(Control_Monad_Aff.bindAff)(Halogen_Util.awaitBody)(function (v) {
-      return Halogen_Driver.runUI(ui)(initialState)(v);
+  var main = Halogen_Aff_Util.runHalogenAff(Control_Bind.bind(Control_Monad_Aff.bindAff)(Halogen_Aff_Util.awaitBody)(function (v) {
+      return Halogen_VDom_Driver.runUI(ui)(Data_Unit.unit)(v);
   }));
   exports["Valid"] = Valid;
   exports["Invalid"] = Invalid;
@@ -10398,10 +10820,9 @@ var PS = {};
   exports["PerformCheck"] = PerformCheck;
   exports["checkAccountNumber"] = checkAccountNumber;
   exports["emptyRow"] = emptyRow;
-  exports["initialState"] = initialState;
   exports["main"] = main;
   exports["ui"] = ui;
 })(PS["Main"] = PS["Main"] || {});
 PS["Main"].main();
 
-},{"virtual-dom/create-element":4,"virtual-dom/diff":5,"virtual-dom/patch":6,"virtual-dom/virtual-hyperscript/hooks/soft-set-hook":13,"virtual-dom/vnode/vnode":21,"virtual-dom/vnode/vtext":23}]},{},[27]);
+},{}]},{},[1]);

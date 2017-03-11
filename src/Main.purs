@@ -1,15 +1,17 @@
 module Main where
 
-import Prelude (type (~>), Unit, bind, pure, map, (<>), ($))
+import Prelude (type (~>), Unit, bind, const, pure, map, unit, (<>), ($))
 import Control.Monad.Eff (Eff)
 import Data.Array (snoc)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
-import Halogen (HalogenEffects, ComponentDSL, ComponentHTML, Component, runUI, component, modify)
-import Halogen.HTML.Events.Indexed as E
-import Halogen.HTML.Indexed as H
-import Halogen.HTML.Properties.Indexed as P
-import Halogen.Util (awaitBody, runHalogenAff)
+import Data.Void (Void)
+import Halogen (ComponentDSL, ComponentHTML, Component, component, modify)
+import Halogen.Aff (HalogenEffects, awaitBody, runHalogenAff)
+import Halogen.HTML.Events as E
+import Halogen.HTML as H
+import Halogen.HTML.Properties as P
+import Halogen.VDom.Driver (runUI)
 
 import ModulusCheck as M
 
@@ -32,17 +34,14 @@ data Query a = SetValidateOnChange Boolean a
              | SetAccountNumber String a
              | PerformCheck a
 
+type Input = Unit
+type Message = Void
+
 emptyRow :: forall a. a -> Row a
 emptyRow = { sortCode: ""
            , accountNumber: ""
            , checkResult: _
            }
-
-initialState :: State
-initialState = { validateOnChange: false
-               , currentRow: emptyRow Nothing
-               , previousRows: []
-               }
 
 checkAccountNumber :: String -> String -> CheckResult
 checkAccountNumber sortCode accountNumber = toCheckResult $ M.check sortCode accountNumber
@@ -52,15 +51,25 @@ checkAccountNumber sortCode accountNumber = toCheckResult $ M.check sortCode acc
     toCheckResult (Right false) = Invalid
     toCheckResult (Left reason) = Error reason
 
-ui :: forall g. Component State Query g
-ui = component { render, eval }
+ui :: forall g. Component H.HTML Query Input Message g
+ui = component { initialState: const initialState
+               , render:       render
+               , eval:         eval
+               , receiver:     const Nothing
+               }
   where
+  
+  initialState :: State
+  initialState = { validateOnChange: false
+                 , currentRow: emptyRow Nothing
+                 , previousRows: []
+                 }
   
   renderValidateOnChangeToggle :: Boolean -> ComponentHTML Query
   renderValidateOnChangeToggle value =
     H.div_
       [ H.input
-        [ P.inputType P.InputCheckbox
+        [ P.type_ P.InputCheckbox
         , P.title "Validate on keypress"
         , P.id_ "validateOnChange"
         , P.checked value
@@ -77,9 +86,9 @@ ui = component { render, eval }
   resultString (Error reason) = "error: " <> reason
   
   resultClassName :: CheckResult -> H.ClassName
-  resultClassName Valid          = H.className "valid"
-  resultClassName Invalid        = H.className "invalid"
-  resultClassName (Error reason) = H.className "error"
+  resultClassName Valid          = H.ClassName "valid"
+  resultClassName Invalid        = H.ClassName "invalid"
+  resultClassName (Error reason) = H.ClassName "error"
   
   renderPreviousRow :: Row CheckResult -> ComponentHTML Query
   renderPreviousRow row =
@@ -108,13 +117,13 @@ ui = component { render, eval }
   renderCurrentRow row =
       H.div_
         [ H.input
-            [ P.inputType P.InputText
+            [ P.type_ P.InputText
             , P.placeholder "sort code"
             , P.value row.sortCode
             , E.onValueInput (E.input SetSortCode)
             ]
         , H.input
-            [ P.inputType P.InputText
+            [ P.type_ P.InputText
             , P.placeholder "account number"
             , P.value row.accountNumber
             , E.onValueInput (E.input SetAccountNumber)
@@ -132,7 +141,7 @@ ui = component { render, eval }
         ]
     where
       resultClass :: Maybe CheckResult -> H.ClassName
-      resultClass Nothing  = H.className "nothing"
+      resultClass Nothing  = H.ClassName "nothing"
       resultClass (Just r) = resultClassName r
         
       result :: Maybe CheckResult -> String
@@ -163,7 +172,7 @@ ui = component { render, eval }
   updateCurrentRow currentRow state =
     state { currentRow = performOptionalCurrentRowCheck state.validateOnChange currentRow }
 
-  eval :: Query ~> ComponentDSL State Query g
+  eval :: forall m. Query ~> ComponentDSL State Query Message m
   eval (SetValidateOnChange input next) = do
     modify (\state -> updateCurrentRow state.currentRow (state { validateOnChange = input }))
     pure next
@@ -182,4 +191,4 @@ ui = component { render, eval }
 main :: Eff (HalogenEffects ()) Unit
 main = runHalogenAff do
   body <- awaitBody
-  runUI ui initialState body
+  runUI ui unit body
