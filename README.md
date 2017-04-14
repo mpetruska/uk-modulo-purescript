@@ -40,23 +40,16 @@ Setting up gulp build for JavaScript projects:
 var gulp = require("gulp"),
     purescript = require("gulp-purescript");
 
-// purescript sources
+// PureScript sources
 var sources = [
   "src/**/*.purs",
   "bower_components/purescript-*/src/**/*.purs",
 ];
 
-// javascript sources
-var foreigns = [
-  "src/**/*.js",
-  "bower_components/purescript-*/src/**/*.js"
-];
-
-// Build the purescript sources and put resultant javascript files into output/.
+// Build the PureScript sources and put resultant javascript files into output.
 gulp.task("make", function() {
   return purescript.psc({
-    src: sources,
-    ffi: foreigns
+    src: sources
   });
 });
 
