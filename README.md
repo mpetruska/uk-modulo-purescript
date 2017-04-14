@@ -42,8 +42,7 @@ var gulp = require("gulp"),
 
 // PureScript sources
 var sources = [
-  "src/**/*.purs",
-  "bower_components/purescript-*/src/**/*.purs",
+  "bower_components/purescript-*/src/**/*.purs"
 ];
 
 // Build the PureScript sources and put resultant javascript files into output.
