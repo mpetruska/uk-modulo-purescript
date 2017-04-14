@@ -23,11 +23,16 @@ License: [MIT](LICENSE)
 Getting started
 ---------------
 
-    bower install --save purescript-uk-modulo
+For PureScript projects:
+
+    npm install purescript@^0.10.3 --save-dev
+    bower install purescript-uk-modulo --save
 
 Setting up gulp build for JavaScript projects:
 
-    bower install --save gulp-purescript
+    npm install purescript@^0.10.3 --save-dev
+    bower install gulp-purescript --save-dev
+    bower install purescript-uk-modulo --save
 
 ```JavaScript
 "use strict";
