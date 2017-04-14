@@ -23,11 +23,16 @@ License: [MIT](LICENSE)
 Getting started
 ---------------
 
-    bower install --save purescript-uk-modulo
+For PureScript projects:
+
+    npm install purescript@^0.10.3 --save-dev
+    bower install purescript-uk-modulo --save
 
 Setting up gulp build for JavaScript projects:
 
-    bower install --save gulp-purescript
+    npm install purescript@^0.10.3 --save-dev
+    bower install gulp-purescript --save-dev
+    bower install purescript-uk-modulo --save
 
 ```JavaScript
 "use strict";
@@ -35,23 +40,15 @@ Setting up gulp build for JavaScript projects:
 var gulp = require("gulp"),
     purescript = require("gulp-purescript");
 
-// purescript sources
+// PureScript sources
 var sources = [
-  "src/**/*.purs",
-  "bower_components/purescript-*/src/**/*.purs",
+  "bower_components/purescript-*/src/**/*.purs"
 ];
 
-// javascript sources
-var foreigns = [
-  "src/**/*.js",
-  "bower_components/purescript-*/src/**/*.js"
-];
-
-// Build the purescript sources and put resultant javascript files into output/.
+// Build the PureScript sources and put resultant javascript files into output.
 gulp.task("make", function() {
   return purescript.psc({
-    src: sources,
-    ffi: foreigns
+    src: sources
   });
 });
 
