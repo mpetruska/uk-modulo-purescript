@@ -20,6 +20,14 @@ License: [MIT](LICENSE)
 
 [Demo page](https://mpetruska.github.io/uk-modulo-purescript/)
 
+Notes on validating sort codes
+------------------------------
+
+The ["Industry Sorting Code Directory" (ISCD)][ICSD link]
+should be used to validate UK sort codes.
+
+[ICSD link]: https://en.wikipedia.org/wiki/Industry_Sorting_Code_Directory
+
 Getting started
 ---------------
 
