@@ -4,7 +4,7 @@ UK modulo - PureScript
 ======================
 
 This is an implementation of the [VocaLink UK Bank account number
-modulus checking][VocaLink link] 4.10 (and previous versions), written in PureScript.
+modulus checking][VocaLink link] 4.20 (and previous versions), written in PureScript.
 
 [VocaLink link]: https://www.vocalink.com/customer-support/modulus-checking/
 
@@ -19,6 +19,14 @@ unfortunately there can be user errors that remain undetected.
 License: [MIT](LICENSE)
 
 [Demo page](https://mpetruska.github.io/uk-modulo-purescript/)
+
+Notes on validating sort codes
+------------------------------
+
+The ["Industry Sorting Code Directory" (ISCD)][ICSD link]
+should be used to validate UK sort codes.
+
+[ICSD link]: https://en.wikipedia.org/wiki/Industry_Sorting_Code_Directory
 
 Getting started
 ---------------
@@ -100,6 +108,8 @@ Please report issues and feature requests [here](https://github.com/mpetruska/uk
 Version history
 ---------------
 
+* 1.3.0 - updates implementation according to [version 4.20 of the spec](https://www.vocalink.com/media/2434/vocalink-validating-account-numbers-v420.pdf)
+ +  (effective from 2017/06/12)
 * 1.2.0 - updates implementation according to [version 4.10 of the spec](https://www.vocalink.com/media/2295/vocalink-validating-account-numbers-v410.pdf)
   (effective from 2017/01/09)
 * 1.1.0 - updates implementation according to [version 4.00 of the spec](https://www.vocalink.com/media/2101/vocalink-validating-account-numbers-v400.pdf)
