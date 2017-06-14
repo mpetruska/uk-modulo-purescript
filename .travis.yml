@@ -9,3 +9,7 @@ install:
   - bower install
 script:
   - travis_wait 30 pulp build && travis_wait pulp test
+cache:
+  directories:
+    - "node_modules"
+    - "bower_components"
