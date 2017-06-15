@@ -28,12 +28,12 @@ import ModulusCheckTypes (Error)
 
 eol :: Parser String Unit
 eol = do
-  many $ satisfy \c -> c == '\n' || c == '\r'
+  _ <- many $ satisfy \c -> c == '\n' || c == '\r'
   pure unit
 
 whiteSpace :: Parser String Unit
 whiteSpace = do
-  many $ satisfy \c -> c == ' ' || c == '\t'
+  _ <- many $ satisfy \c -> c == ' ' || c == '\t'
   pure unit
 
 digitParser :: Parser String Int
