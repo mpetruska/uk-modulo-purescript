@@ -11,12 +11,14 @@
     "virtual-dom": "^2.1.1"
   },
   "devDependencies": {
-    "purescript": "^0.10.3",
     "bower": "^1.8.0",
-    "pulp": "^10.0.0"
+    "pscid": "^2.0.2",
+    "pulp": "^11.0.0",
+    "purescript": "^0.11.5",
+    "uglify-js": "^3.0.16"
   },
   "scripts": {
-    "build": "pulp browserify --optimise --to dist/index.js",
+    "build": "pulp browserify --optimise --to build/index.js && uglifyjs build/index.js -o dist/index.min.js",
     "test": "pulp test"
   }
 }

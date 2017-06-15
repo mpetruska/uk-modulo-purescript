@@ -4,7 +4,7 @@ UK modulo - PureScript
 ======================
 
 This is an implementation of the [VocaLink UK Bank account number
-modulus checking][VocaLink link] 4.00 (and previous version), written in PureScript.
+modulus checking][VocaLink link] 4.30 (and previous versions), written in PureScript.
 
 [VocaLink link]: https://www.vocalink.com/customer-support/modulus-checking/
 
@@ -20,14 +20,27 @@ License: [MIT](LICENSE)
 
 [Demo page](https://mpetruska.github.io/uk-modulo-purescript/)
 
+Notes on validating sort codes
+------------------------------
+
+The ["Industry Sorting Code Directory" (ISCD)][ICSD link]
+should be used to validate UK sort codes.
+
+[ICSD link]: https://en.wikipedia.org/wiki/Industry_Sorting_Code_Directory
+
 Getting started
 ---------------
 
-    bower install --save purescript-uk-modulo
+For PureScript projects:
+
+    npm install purescript --save-dev
+    bower install purescript-uk-modulo --save
 
 Setting up gulp build for JavaScript projects:
 
-    bower install --save gulp-purescript
+    npm install purescript --save-dev
+    bower install gulp-purescript --save-dev
+    bower install purescript-uk-modulo --save
 
 ```JavaScript
 "use strict";
@@ -35,23 +48,15 @@ Setting up gulp build for JavaScript projects:
 var gulp = require("gulp"),
     purescript = require("gulp-purescript");
 
-// purescript sources
+// PureScript sources
 var sources = [
-  "src/**/*.purs",
-  "bower_components/purescript-*/src/**/*.purs",
+  "bower_components/purescript-*/src/**/*.purs"
 ];
 
-// javascript sources
-var foreigns = [
-  "src/**/*.js",
-  "bower_components/purescript-*/src/**/*.js"
-];
-
-// Build the purescript sources and put resultant javascript files into output/.
+// Build the PureScript sources and put resultant javascript files into output.
 gulp.task("make", function() {
   return purescript.psc({
-    src: sources,
-    ffi: foreigns
+    src: sources
   });
 });
 
@@ -103,7 +108,13 @@ Please report issues and feature requests [here](https://github.com/mpetruska/uk
 Version history
 ---------------
 
+* 1.4.0 - updates implementation according to [version 4.30 of the spec](https://www.vocalink.com/media/2467/vocalink-validating-account-numbers-v430.pdf)
+  (valid from 2017/07/03)
+* 1.3.0 - updates implementation according to [version 4.20 of the spec](https://www.vocalink.com/media/2434/vocalink-validating-account-numbers-v420.pdf)
+  (valid from 2017/06/12)
+* 1.2.0 - updates implementation according to [version 4.10 of the spec](https://www.vocalink.com/media/2295/vocalink-validating-account-numbers-v410.pdf)
+  (valid from 2017/01/09)
 * 1.1.0 - updates implementation according to [version 4.00 of the spec](https://www.vocalink.com/media/2101/vocalink-validating-account-numbers-v400.pdf)
-  (effective from 2017/01/09)
+  (valid from 2017/01/09)
 * 1.0.1 - build updated, PureScript version 0.10.3
 * 1.0.0 - initial release, spec version 3.90

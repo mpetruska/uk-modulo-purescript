@@ -1,11 +1,10 @@
 module Main where
 
-import Prelude (type (~>), Unit, bind, const, pure, map, unit, (<>), ($))
+import Prelude
 import Control.Monad.Eff (Eff)
 import Data.Array (snoc)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
-import Data.Void (Void)
 import Halogen (ComponentDSL, ComponentHTML, Component, component, modify)
 import Halogen.Aff (HalogenEffects, awaitBody, runHalogenAff)
 import Halogen.HTML.Events as E
