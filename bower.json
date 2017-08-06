@@ -9,7 +9,7 @@
   ],
   "dependencies": {
     "purescript-halogen": "^2.1.0",
-    "purescript-uk-modulo": "^1.4.0"
+    "purescript-uk-modulo": "^1.5.0"
   },
   "devDependencies": {
     "purescript-psci-support": "^3.0.0"
