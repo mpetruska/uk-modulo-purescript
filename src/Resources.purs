@@ -1,6 +1,6 @@
 module ModulusCheck.Resources
        ( scsubtab
-       , valacdos_v460
+       , valacdos_v470
        ) where
 
 scsubtab :: String
@@ -29,8 +29,8 @@ scsubtab =
   938654 938621
   """
 
-valacdos_v460 :: String
-valacdos_v460 =
+valacdos_v470 :: String
+valacdos_v470 =
   """
 010004 016715 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1
 040004 040004 DBLAL    0    0    0    0    0    0    8    7    6    5    4    3    2    1
@@ -672,6 +672,7 @@ valacdos_v460 =
 302556 302556 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9
 302579 302580 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2
 302579 302580 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9
+302880 302880 MOD11    0    0    0    0    0    0    8    7    6    5    4    3    2    1
 303460 303461 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2
 303460 303461 MOD11    0    0    3    2    9    8    1    7    6    5    4    3    2    1   9
 305907 305939 MOD11    0    0    3    2    9    8    5    7    6    5    4    3    2    1   2
