@@ -4,7 +4,7 @@ UK modulo - PureScript
 ======================
 
 This is an implementation of the [VocaLink UK Bank account number
-modulus checking][VocaLink link] 5.10 (and previous versions), written in PureScript.
+modulus checking][VocaLink link] 5.20 (and previous versions), written in PureScript.
 
 [VocaLink link]: https://www.vocalink.com/customer-support/modulus-checking/
 
@@ -108,6 +108,8 @@ Please report issues and feature requests [here](https://github.com/mpetruska/uk
 Version history
 ---------------
 
+* 5.20.0 - updates implementation according to [version 5.20 of the spec](https://www.vocalink.com/media/3038/validating-account-numbers-v520.pdf)
+  (valid from 2018/10/22)
 * 5.10.0 - updates implementation according to [version 5.10 of the spec](https://www.vocalink.com/media/3035/validating-account-numbers-v510.pdf)
   (valid from 2018/09/17)
 * 5.0.0 - updates implementation according to [version 5.00 of the spec](https://www.vocalink.com/media/3019/vocalink-validating-account-numbers-v500.pdf)
