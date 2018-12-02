@@ -8,10 +8,10 @@
     "url": "https://github.com/mpetruska/uk-modulo-purescript/issues"
   },
   "devDependencies": {
-    "bower": "^1.8.2",
-    "pscid": "^2.4.0",
-    "pulp": "^12.0.1",
-    "purescript": "^0.11.7"
+    "bower": "^1.8.4",
+    "pscid": "^2.6.0",
+    "pulp": "^12.3.0",
+    "purescript": "^0.12.1"
   },
   "scripts": {
     "build": "pulp build",
