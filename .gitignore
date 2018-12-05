@@ -1,7 +1,10 @@
+# Node
+
+/node_modules/
+
 # Pulp
 
 /bower_components/
-/node_modules/
 /.pulp-cache/
 /output/
 /.psci*
@@ -19,3 +22,7 @@
 # Emacs
 \#*\#
 *~
+
+# Logs
+
+*.log
