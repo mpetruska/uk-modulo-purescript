@@ -13,7 +13,8 @@ import Prelude
 import Data.Either (Either(..))
 import Data.List (List(..), concat, drop, length, take, (:), (!!))
 import Data.Maybe (Maybe(..))
-import Data.String (Pattern(..), indexOf, singleton)
+import Data.String (Pattern(..), indexOf)
+import Data.String.CodeUnits (singleton)
 
 import ModulusCheckTypes (Error)
 

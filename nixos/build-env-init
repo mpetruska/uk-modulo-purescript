@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+echo "Entering build environment..."
+bash --rcfile nixos/build-env-rc

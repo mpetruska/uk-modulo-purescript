@@ -1,7 +1,10 @@
+# Node
+
+/node_modules/
+
 # Pulp
 
 /bower_components/
-/node_modules/
 /.pulp-cache/
 /output/
 /.psci*
@@ -12,3 +15,14 @@
 
 # Mac OS
 .DS_Store
+
+# NixOS
+/result
+
+# Emacs
+\#*\#
+*~
+
+# Logs
+
+*.log
