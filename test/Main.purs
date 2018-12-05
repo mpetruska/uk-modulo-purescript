@@ -1,15 +1,12 @@
 module Test.Main where
 
 import Prelude
-import Control.Monad.Aff.AVar (AVAR)
-import Control.Monad.Eff (Eff)
-import Control.Monad.Eff.Console (CONSOLE)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Data.List (List(..), concat, (:), (..))
+import Effect (Effect)
 import Test.Unit (Test, suite, test)
 import Test.Unit.Assert as Assert
-import Test.Unit.Console (TESTOUTPUT)
 import Test.Unit.Main (runTest)
 
 import ModulusCheck.Data.AccountNumber (Digits, eqAccountNumber, showAccountNumber)
@@ -95,29 +92,29 @@ additionalTestCases =
   : additionalTestCase "308088" "24457846" false
   : Nil
 
-runStandardTestCase :: forall e. StandardTestCase -> Test e
+runStandardTestCase :: StandardTestCase -> Test
 runStandardTestCase testCase =
     Assert.assert errorMessage $ (check testCase.sortCode testCase.accountNumber) == (Right testCase.shouldPass)
   where
     errorMessage = "standard test case #" <> show testCase.testNumber <> " failed"
 
-runAdditionalTestCase :: forall e. AdditionalTestCase -> Test e
+runAdditionalTestCase :: AdditionalTestCase -> Test
 runAdditionalTestCase testCase =
     Assert.assert errorMessage $ (check testCase.sortCode testCase.accountNumber) == (Right testCase.shouldPass)
   where
     errorMessage = "additional test case: " <> show testCase.sortCode <> " " <> show testCase.accountNumber <> " failed"
 
-testParsing :: forall e. String -> String -> AccountNumberParser -> Digits -> Test e
+testParsing :: String -> String -> AccountNumberParser -> Digits -> Test
 testParsing sortCode accountNumber parser expectedDigits =
-    Assert.assert errorMessage (eqAccountNumber expected <$> result == Right true)
+    Assert.assert errorMessage (((eqAccountNumber expected) <$> result) == Right true)
   where
-    result = parseAccountNumber sortCode accountNumber parser
-    expected = { sortCodeString: sortCode, digits: expectedDigits }
+    result       = parseAccountNumber sortCode accountNumber parser
+    expected     = { sortCodeString: sortCode, digits: expectedDigits }
     errorMessage =    "failed to parse " <> show sortCode <> " " <> show accountNumber <> " correctly:\n"
                    <> "expected digits: " <> show expectedDigits <> "\n"
                    <> "actual: " <> show (showAccountNumber <$> result)
 
-main :: forall e. Eff ( console :: CONSOLE, testOutput :: TESTOUTPUT, avar :: AVAR | e) Unit
+main :: Effect Unit
 main = runTest do
   suite "Modulus check" do
     test "standard test cases" do
