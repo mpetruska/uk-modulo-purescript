@@ -7,7 +7,7 @@ install:
   - npm install
   - bower install
 script:
-  - travis_wait 30 pulp build && travis_wait pulp test
+  - pulp build && pulp test
 cache:
   directories:
     - "node_modules"
