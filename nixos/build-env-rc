@@ -1,2 +1,2 @@
 export PATH="node_modules/.bin:$PATH"
-export PS1="> "
+export PS1="build > "
