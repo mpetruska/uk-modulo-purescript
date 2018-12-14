@@ -1,12 +1,12 @@
 module Main where
 
 import Prelude
-import Control.Monad.Eff (Eff)
 import Data.Array (snoc)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
+import Effect (Effect)
 import Halogen (ComponentDSL, ComponentHTML, Component, component, modify)
-import Halogen.Aff (HalogenEffects, awaitBody, runHalogenAff)
+import Halogen.Aff (awaitBody, runHalogenAff)
 import Halogen.HTML.Events as E
 import Halogen.HTML as H
 import Halogen.HTML.Properties as P
@@ -173,21 +173,21 @@ ui = component { initialState: const initialState
 
   eval :: forall m. Query ~> ComponentDSL State Query Message m
   eval (SetValidateOnChange input next) = do
-    modify (\state -> updateCurrentRow state.currentRow (state { validateOnChange = input }))
+    _ <- modify (\state -> updateCurrentRow state.currentRow (state { validateOnChange = input }))
     pure next
   eval (SetSortCode input next) = do
-    modify (\state -> updateCurrentRow (state.currentRow { sortCode = input }) state)
+    _ <- modify (\state -> updateCurrentRow (state.currentRow { sortCode = input }) state)
     pure next
   eval (SetAccountNumber input next) = do
-    modify (\state -> updateCurrentRow (state.currentRow { accountNumber = input }) state)
+    _ <- modify (\state -> updateCurrentRow (state.currentRow { accountNumber = input }) state)
     pure next
   eval (PerformCheck next) = do
-    modify (\state -> state { currentRow = emptyRow Nothing
-                            , previousRows = snoc state.previousRows (checkRow state.currentRow)
-                            })
+    _ <- modify (\state -> state { currentRow = emptyRow Nothing
+                                 , previousRows = snoc state.previousRows (checkRow state.currentRow)
+                                 })
     pure next
 
-main :: Eff (HalogenEffects ()) Unit
+main :: Effect Unit
 main = runHalogenAff do
   body <- awaitBody
   runUI ui unit body

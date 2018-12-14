@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+case $1 in
+  10)
+    NODE_VERSION=10
+    ;;
+  *)
+    NODE_VERSION=8
+esac
+
+nix-build -A fhsEnv nixos/fhs-node-${NODE_VERSION}.nix && \
+result/bin/fhs-node-$NODE_VERSION

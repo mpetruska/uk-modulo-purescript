@@ -8,10 +8,8 @@
     "output"
   ],
   "dependencies": {
-    "purescript-halogen": "^3.1.2",
-    "purescript-uk-modulo": "^1.9.0"
+    "purescript-halogen": "^4.0.0",
+    "purescript-uk-modulo": "^5.30.0"
   },
-  "devDependencies": {
-    "purescript-psci-support": "^3.0.0"
-  }
+  "devDependencies": {}
 }
