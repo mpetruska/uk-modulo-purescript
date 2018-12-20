@@ -9,7 +9,7 @@
   ],
   "dependencies": {
     "purescript-halogen": "^4.0.0",
-    "purescript-uk-modulo": "^5.30.0"
+    "purescript-uk-modulo": "^5.40.0"
   },
   "devDependencies": {}
 }
