@@ -14,7 +14,7 @@
     "type": "git",
     "url": "git://github.com/mpetruska/uk-modulo-purescript.git"
   },
-  "description": "A PureScript implementation of the VocaLink UK Bank account number modulus checking version 5.40.",
+  "description": "A PureScript implementation of the VocaLink UK Bank account number modulus checking version 5.50.",
   "homepage": "https://github.com/mpetruska/uk-modulo-purescript",
   "dependencies": {
     "purescript-prelude": "^4.1.0",
