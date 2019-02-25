@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.org/mpetruska/uk-modulo-purescript.svg?branch=master)](https://travis-ci.org/mpetruska/uk-modulo-purescript)
+[![Known Vulnerabilities](https://snyk.io/test/github/mpetruska/uk-modulo-purescript/badge.svg?targetFile=package.json)](https://snyk.io/test/github/mpetruska/uk-modulo-purescript?targetFile=package.json)
 
 UK modulo - PureScript
 ======================
