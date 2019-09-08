@@ -14,11 +14,11 @@ import ModulusCheck.Data.CheckRow (CheckRow)
 import ModulusCheck.Data.CheckRow.Parser (checkRowTableParser)
 import ModulusCheck.Data.SubstitutionRow.Parser (sortCodeSubstitutionTableParser)
 import ModulusCheck.Parsers (parse)
-import ModulusCheck.Resources (scsubtab, valacdos_v570)
+import ModulusCheck.Resources (scsubtab, valacdos_v580)
 import ModulusCheckTypes (Error)
 
 checkRowsTable :: Either Error (List CheckRow)
-checkRowsTable = parse valacdos_v570 checkRowTableParser
+checkRowsTable = parse valacdos_v580 checkRowTableParser
 
 -- TODO: needs optimization?
 getCheckRows :: String -> Either Error (List CheckRow)

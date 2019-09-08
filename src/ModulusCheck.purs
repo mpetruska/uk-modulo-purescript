@@ -31,7 +31,7 @@ import ModulusCheck.Data.AccountNumber.Parser ( AccountNumberParser
                                               , standardAccountNumberParser
                                               , santanderAccountNumberParser
                                               , nationalWestMinsterAccountNumberParser
-                                              , coOperativeAccountNumberParser
+                                              , coOperativeOrLeedsBuildingSocietyAccountNumberParser
                                               )
 import ModulusCheck.Data.CheckRow (CheckMethod(..), CheckRow)
 import ModulusCheck.Data.Tables (getCheckRows)
@@ -50,7 +50,7 @@ check sortCode accountNumber =
       : sevenDigitAccountNumberParser
       : santanderAccountNumberParser
       : nationalWestMinsterAccountNumberParser
-      : coOperativeAccountNumberParser
+      : coOperativeOrLeedsBuildingSocietyAccountNumberParser
       : Nil
       
     collectResult :: Maybe CheckResult -> AccountNumberParser -> Maybe CheckResult
