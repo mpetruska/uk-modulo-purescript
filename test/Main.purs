@@ -17,7 +17,7 @@ import ModulusCheck.Data.AccountNumber.Parser ( AccountNumberParser
                                               , sevenDigitAccountNumberParser
                                               , santanderAccountNumberParser
                                               , nationalWestMinsterAccountNumberParser
-                                              , coOperativeAccountNumberParser
+                                              , coOperativeOrLeedsBuildingSocietyAccountNumberParser
                                               )
 import ModulusCheck (check)
 
@@ -133,4 +133,4 @@ main = runTest do
     test "ten digit test cases" do
       testParsing "123456" "0123456789" nationalWestMinsterAccountNumberParser $ concat ((1..6) : (2..9) : Nil)
       testParsing "123456" "01-23456789" nationalWestMinsterAccountNumberParser $ concat ((1..6) : (2..9) : Nil)
-      testParsing "123456" "0123456789" coOperativeAccountNumberParser $ concat ((1..6) : (0..7) : Nil)
+      testParsing "123456" "0123456789" coOperativeOrLeedsBuildingSocietyAccountNumberParser $ concat ((1..6) : (0..7) : Nil)

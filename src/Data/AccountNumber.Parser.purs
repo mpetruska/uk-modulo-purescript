@@ -7,7 +7,7 @@ module ModulusCheck.Data.AccountNumber.Parser
        , sevenDigitAccountNumberParser
        , santanderAccountNumberParser
        , nationalWestMinsterAccountNumberParser
-       , coOperativeAccountNumberParser
+       , coOperativeOrLeedsBuildingSocietyAccountNumberParser
        ) where
 
 import Prelude
@@ -68,8 +68,8 @@ nationalWestMinsterAccountNumberParser =
   , transform: \s a -> concat (s : a : Nil)
   }
 
-coOperativeAccountNumberParser :: AccountNumberParser
-coOperativeAccountNumberParser =
+coOperativeOrLeedsBuildingSocietyAccountNumberParser :: AccountNumberParser
+coOperativeOrLeedsBuildingSocietyAccountNumberParser =
   { accountDigitsParser: digitsParser 8 <* digitsParser 2 <* eof
   , transform: \s a -> concat (s : a : Nil)
   }
