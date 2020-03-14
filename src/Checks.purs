@@ -16,7 +16,7 @@ module ModulusCheck.Checks
 
 import Prelude
 import Data.Either (Either(..))
-import Data.Foldable (sum)
+import Data.Foldable (all, sum)
 import Data.Int (round, toNumber)
 import Data.Lazy (Lazy, defer, force)
 import Data.List (List(..), zipWith, (:))
@@ -116,8 +116,8 @@ exception5Check mod11Weights dblAlWeights accountNumber = do
     secondCheck w d = getDigit 'h' d >>= performDblAlCheck (doubleAlternateSum w d) >>> pure
 
 -- Exception 6
-exception6Check :: CheckRow -> CheckRow -> AccountNumber -> CheckResult
-exception6Check row1 row2 accountNumber = do
+exception6Check :: List CheckRow -> AccountNumber -> CheckResult
+exception6Check rows accountNumber = do
     a <- getDigit 'a' accountNumber.digits
     g <- getDigit 'g' accountNumber.digits
     h <- getDigit 'h' accountNumber.digits
@@ -129,9 +129,7 @@ exception6Check row1 row2 accountNumber = do
     performCheck 6 true = pure true
     performCheck 7 true = pure true
     performCheck 8 true = pure true
-    performCheck _ _    =
-      pure $ performStandardCheck row1 accountNumber
-          && performStandardCheck row2 accountNumber
+    performCheck _ _    = pure $ all (\c -> performStandardCheck c accountNumber) rows
 
 -- Exception 7
 exception7Check :: CheckRow -> AccountNumber -> CheckResult

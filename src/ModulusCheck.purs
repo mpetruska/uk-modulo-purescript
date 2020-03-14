@@ -3,10 +3,10 @@ module ModulusCheck
        , module ModulusCheckTypes
        ) where
 
-import Prelude (pure, bind, ($))
+import Prelude (bind, not, pure, ($), (&&), (==), (>>>))
 import Data.Either (Either(..))
-import Data.Foldable (all, foldl)
-import Data.List (List(..), (:))
+import Data.Foldable (all, any, foldl)
+import Data.List (List(..), (:), filter)
 import Data.Maybe (Maybe(..))
 
 import ModulusCheck.Checks ( isStandardCheck
@@ -67,6 +67,9 @@ check sortCode accountNumber =
       checkRows <- getCheckRows acc.sortCodeString
       performCheck checkRows acc
 
+isException6 :: CheckRow -> Boolean
+isException6 r = r.exceptionCode == (Just 6)
+
 -- No rows in check table => no modulus check can be performed, must assume account number is valid
 performCheck :: List CheckRow -> AccountNumber -> CheckResult
 performCheck Nil _ = (Right true)
@@ -95,9 +98,11 @@ performCheck ( row1 @ { checkMethod: Mod11, exceptionCode: Just 5 }
   exception5Check row1.weights row2.weights accountNumber
 
 -- Exception 6
-performCheck ( row1 @ { exceptionCode: Just 6 }
-             : row2 @ { exceptionCode: Just 6 } : Nil ) accountNumber =
-  exception6Check row1 row2 accountNumber
+performCheck rows accountNumber
+             | any isException6 rows = do
+    checks1 <- exception6Check (filter isException6 rows) accountNumber
+    checks2 <- performCheck (filter (isException6 >>> not) rows) accountNumber
+    pure $ checks1 && checks2
 
 -- Exception 7
 performCheck ( row @ { exceptionCode: Just 7 } : Nil ) accountNumber =
@@ -125,4 +130,5 @@ performCheck ( row1 @ { exceptionCode: Just 14 } : Nil) accountNumber =
 performCheck standardCheckRows accountNumber
              | all isStandardCheck standardCheckRows = Right $ all (\c -> performStandardCheck c accountNumber) standardCheckRows
 
+-- catch not implemented cases
 performCheck _ _ = (Left "Check not implemented for the given account number")
